@@ -1,0 +1,61 @@
+[project]
+name = "haystack-rag-service"
+version = "0.1.0"
+description = "A simple Haystack RAG microservice"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.68.0",
+    "uvicorn>=0.15.0",
+    "farm-haystack==1.22.0",
+    "chromadb>=0.4.0",
+    "sentence-transformers>=2.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "httpx>=0.27.0",
+    "black>=24.0.0",
+    "isort>=5.13.0",
+    "flake8>=7.0.0",
+    "mypy>=1.8.0",
+]
+
+[tool.pytest.ini_options]
+# Only look for tests under the backend/tests directory
+testpaths = ["backend/tests"]
+# Match Python test files by naming convention
+python_files = ["test_*.py"]
+# Ignore virtual env and egg-info directories
+norecursedirs = [".venv", "haystack_rag_service.egg-info"]
+# Run in verbose mode
+addopts = "--import-mode=importlib -v"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203"]
+exclude = [".git", "__pycache__", "build", "dist"]
+
+[tool.setuptools.package-dir]
+"" = "backend"
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+include = ["*", "*.*"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
