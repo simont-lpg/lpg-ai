@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 import pytest
-from app.main import app
+from backend.app.main import app
 from unittest.mock import patch
 
 client = TestClient(app)
@@ -28,7 +28,7 @@ def test_query_endpoint_validation():
     # Test non-string query
     response = client.post("/query", json={"query": 123})
     assert response.status_code == 422
-    assert "type_error" in response.json()["detail"][0]["type"]
+    assert "string_type" in response.json()["detail"][0]["type"]
 
 def test_query_endpoint_success():
     """Test successful query returns expected format."""
@@ -56,7 +56,7 @@ def test_query_endpoint_with_top_k():
 
 def test_query_endpoint_pipeline_error():
     """Test query endpoint handles pipeline errors gracefully."""
-    with patch('app.main.pipeline') as mock_pipeline:
+    with patch('backend.app.main.pipeline') as mock_pipeline:
         mock_pipeline.run.side_effect = Exception("Pipeline error")
         
         response = client.post("/query", json={"query": "test"})
