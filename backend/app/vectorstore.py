@@ -63,8 +63,14 @@ class InMemoryDocumentStore:
             except Exception as e:
                 raise Exception(f"Failed to generate embeddings for document: {str(e)}")
     
-    def delete_documents(self, document_ids: List[str]):
+    def delete_documents(self, document_ids: Optional[List[str]] = None):
         """Delete documents from the store."""
+        if document_ids is None:
+            # Clear all documents
+            self.documents = []
+            self.embeddings = []
+            return
+            
         indices_to_delete = []
         for i, doc in enumerate(self.documents):
             if doc.id in document_ids:
@@ -74,6 +80,22 @@ class InMemoryDocumentStore:
         for i in sorted(indices_to_delete, reverse=True):
             del self.documents[i]
             del self.embeddings[i]
+    
+    def get_all_documents(self, filters: Optional[dict] = None) -> List[Document]:
+        """Get all documents, optionally filtered by metadata."""
+        if not filters:
+            return self.documents
+        
+        filtered_docs = []
+        for doc in self.documents:
+            match = True
+            for key, value in filters.items():
+                if key not in doc.meta or doc.meta[key] != value:
+                    match = False
+                    break
+            if match:
+                filtered_docs.append(doc)
+        return filtered_docs
     
     def query_by_embedding(self, query_embedding: np.ndarray, top_k: int = 5) -> List[Document]:
         """Query documents by embedding similarity."""

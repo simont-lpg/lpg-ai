@@ -4,6 +4,7 @@ from unstructured.partition.text import partition_text
 from .dependencies import get_document_store, get_embedder
 from .schema import Document
 import io
+import uuid
 
 class SimpleConverter:
     """A simple converter that uses unstructured to convert files to text."""
@@ -18,7 +19,7 @@ class SimpleConverter:
             file_obj = io.BytesIO(content)
             # Use text partitioner directly for text content
             elements = partition_text(file=file_obj)
-            return [Document(content=str(element)) for element in elements]
+            return [Document(id=str(uuid.uuid4()), content=str(element)) for element in elements]
         except Exception as e:
             raise Exception(f"Failed to convert file content: {str(e)}")
 
@@ -44,6 +45,7 @@ async def ingest_documents(
         
     total_chunks = 0
     files_ingested = 0
+    all_documents = []
     
     # Create a single converter instance for all file types
     converter = SimpleConverter()
@@ -60,19 +62,29 @@ async def ingest_documents(
             # Convert to document
             documents = converter.run(content)
             
-            # Embed chunks
-            embeddings = embedder.embed_batch([doc.content for doc in documents])
+            # Add namespace to documents only if it's provided
+            for doc in documents:
+                doc.meta = {"namespace": namespace} if namespace is not None else {}
             
-            # Store documents with embeddings
-            for doc, embedding in zip(documents, embeddings):
-                doc.embedding = embedding
-                doc.metadata = {"namespace": namespace} if namespace else {}
-                document_store.write_documents([doc])
-            
+            all_documents.extend(documents)
             total_chunks += len(documents)
             files_ingested += 1
         except Exception as e:
             raise Exception(f"Failed to ingest file {file.filename}: {str(e)}")
+    
+    if all_documents:
+        try:
+            # Embed all documents at once
+            embeddings = embedder.embed_batch([doc.content for doc in all_documents])
+            
+            # Add embeddings to documents
+            for doc, embedding in zip(all_documents, embeddings):
+                doc.embedding = embedding
+            
+            # Write all documents at once
+            document_store.write_documents(all_documents)
+        except Exception as e:
+            raise Exception(f"Failed to process documents: {str(e)}")
     
     return {
         "status": "success",

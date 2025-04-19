@@ -1,10 +1,13 @@
 from typing import Generator, List
 from fastapi import Depends
 from .config import Settings, get_settings
-from .vectorstore import get_vectorstore, OllamaEmbeddings
+from .vectorstore import get_vectorstore, OllamaEmbeddings, InMemoryDocumentStore
 from .schema import Document
 from sentence_transformers import SentenceTransformer
 import numpy as np
+
+# Global document store instance
+_document_store = None
 
 class Embedder:
     """Wrapper class for embedding models."""
@@ -22,10 +25,12 @@ class Embedder:
         else:
             raise ValueError(f"Unsupported model type: {type(self.model)}")
 
-def get_document_store(settings: Settings = Depends(get_settings)):
+def get_document_store(settings: Settings = Depends(get_settings)) -> InMemoryDocumentStore:
     """Get document store dependency."""
-    store = get_vectorstore(settings)
-    return store
+    global _document_store
+    if _document_store is None:
+        _document_store = get_vectorstore(settings)
+    return _document_store
 
 def get_embedder(settings: Settings = Depends(get_settings)):
     """Get embedder dependency."""
