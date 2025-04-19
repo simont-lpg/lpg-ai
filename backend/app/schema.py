@@ -40,4 +40,13 @@ class Query(BaseModel):
 class Response(BaseModel):
     """Response model for RAG queries."""
     answers: List[str] = []
-    documents: List[DocumentMetadata] 
+    documents: List[DocumentMetadata]
+
+class DeleteDocumentsRequest(BaseModel):
+    """Request model for deleting documents by file name."""
+    file_name: str
+
+class DeleteDocumentsResponse(BaseModel):
+    """Response model for document deletion."""
+    status: str = "success"
+    deleted: int 

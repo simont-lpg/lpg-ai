@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
 from typing import List, Optional
 from .config import Settings
 from .pipeline import build_pipeline
-from .schema import Query, Response, DocumentMetadata, DocumentFull
+from .schema import Query, Response, DocumentMetadata, DocumentFull, DeleteDocumentsRequest, DeleteDocumentsResponse
 from .ingest import ingest_documents
 from .dependencies import get_document_store, get_embedder
 from pydantic import ConfigDict
@@ -89,4 +89,17 @@ async def get_documents(
         ) for doc in documents]
     except Exception as e:
         logger.error(f"Error in get_documents endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.delete("/documents", response_model=DeleteDocumentsResponse)
+async def delete_documents(
+    request: DeleteDocumentsRequest,
+    document_store = Depends(get_document_store)
+):
+    """Delete documents by file name."""
+    try:
+        deleted_count = document_store.delete_documents(filters={"file_name": request.file_name})
+        return DeleteDocumentsResponse(deleted=deleted_count)
+    except Exception as e:
+        logger.error(f"Error in delete_documents endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail={"error": str(e)}) 

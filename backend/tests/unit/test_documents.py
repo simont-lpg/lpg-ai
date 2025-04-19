@@ -5,6 +5,7 @@ from app.schema import DocumentFull
 from app.config import Settings
 from app.dependencies import get_document_store
 from unittest.mock import patch
+import json
 
 @pytest.fixture
 def client():
@@ -69,6 +70,50 @@ def test_error_path(client):
     try:
         # Test the error case
         resp = client.get("/documents")
+        assert resp.status_code == 500
+        error_data = resp.json()
+        assert "detail" in error_data
+        assert "error" in error_data["detail"]
+        assert error_data["detail"]["error"] == "boom"
+    finally:
+        # Clean up the override
+        app.dependency_overrides.clear() 
+
+def test_delete_documents_success(client, dummy_store):
+    # Override the dependency
+    app.dependency_overrides[get_document_store] = lambda: dummy_store
+    
+    try:
+        # Mock the delete_documents method to return a count
+        dummy_store.delete_documents = lambda filters: 123
+        
+        # Test successful deletion
+        resp = client.request("DELETE", "/documents", data=json.dumps({"file_name": "test.txt"}), headers={"Content-Type": "application/json"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "success"
+        assert data["deleted"] == 123
+    finally:
+        # Clean up the override
+        app.dependency_overrides.clear()
+
+def test_delete_documents_missing_file_name(client):
+    # Test missing file_name field
+    resp = client.request("DELETE", "/documents", data=json.dumps({}), headers={"Content-Type": "application/json"})
+    assert resp.status_code == 422
+
+def test_delete_documents_error(client):
+    # Create a store that raises an exception
+    class ErrorStore:
+        def delete_documents(self, filters):
+            raise Exception("boom")
+    
+    # Override the dependency
+    app.dependency_overrides[get_document_store] = lambda: ErrorStore()
+    
+    try:
+        # Test the error case
+        resp = client.request("DELETE", "/documents", data=json.dumps({"file_name": "test.txt"}), headers={"Content-Type": "application/json"})
         assert resp.status_code == 500
         error_data = resp.json()
         assert "detail" in error_data

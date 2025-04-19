@@ -63,23 +63,47 @@ class InMemoryDocumentStore:
             except Exception as e:
                 raise Exception(f"Failed to generate embeddings for document: {str(e)}")
     
-    def delete_documents(self, document_ids: Optional[List[str]] = None):
-        """Delete documents from the store."""
-        if document_ids is None:
+    def delete_documents(self, document_ids: Optional[List[str]] = None, filters: Optional[dict] = None) -> int:
+        """Delete documents from the store.
+        
+        Args:
+            document_ids: Optional list of document IDs to delete
+            filters: Optional dictionary of metadata filters
+            
+        Returns:
+            Number of documents deleted
+        """
+        if document_ids is None and filters is None:
             # Clear all documents
+            count = len(self.documents)
             self.documents = []
             self.embeddings = []
-            return
-            
+            return count
+        
         indices_to_delete = []
-        for i, doc in enumerate(self.documents):
-            if doc.id in document_ids:
-                indices_to_delete.append(i)
+        
+        if document_ids is not None:
+            # Delete by document IDs
+            for i, doc in enumerate(self.documents):
+                if doc.id in document_ids:
+                    indices_to_delete.append(i)
+        else:
+            # Delete by filters
+            for i, doc in enumerate(self.documents):
+                match = True
+                for key, value in filters.items():
+                    if key not in doc.meta or doc.meta[key] != value:
+                        match = False
+                        break
+                if match:
+                    indices_to_delete.append(i)
         
         # Delete in reverse order to maintain indices
         for i in sorted(indices_to_delete, reverse=True):
             del self.documents[i]
             del self.embeddings[i]
+        
+        return len(indices_to_delete)
     
     def get_all_documents(self, filters: Optional[dict] = None) -> List[DocumentFull]:
         """Get all documents, optionally filtered by metadata."""
