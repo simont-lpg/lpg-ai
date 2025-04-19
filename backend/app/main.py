@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from .config import Settings
 from .pipeline import build_pipeline
@@ -15,6 +16,15 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Haystack RAG Service")
 app.model_config = ConfigDict(arbitrary_types_allowed=True)
 settings = Settings()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:5175"],  # Allow both Vite ports
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize pipeline components
 pipeline, retriever = build_pipeline(settings=settings)
@@ -110,6 +120,7 @@ async def get_files(document_store = Depends(get_document_store)):
     try:
         # Get all documents
         documents = document_store.get_all_documents()
+        logger.info(f"Retrieved {len(documents)} documents from document store")
         
         # Group documents by filename
         file_groups = {}
@@ -117,6 +128,7 @@ async def get_files(document_store = Depends(get_document_store)):
             filename = doc.meta.get("file_name", "unknown")
             namespace = doc.meta.get("namespace", "default")
             key = (filename, namespace)
+            logger.info(f"Processing document: {filename} in namespace {namespace}")
             if key not in file_groups:
                 file_groups[key] = {
                     "filename": filename,
@@ -128,6 +140,7 @@ async def get_files(document_store = Depends(get_document_store)):
         
         # Convert to list and sort by filename
         files = sorted(file_groups.values(), key=lambda x: x["filename"])
+        logger.info(f"Returning {len(files)} unique files")
         
         return FileListResponse(files=files)
     except Exception as e:
