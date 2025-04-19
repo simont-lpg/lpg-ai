@@ -49,4 +49,15 @@ class DeleteDocumentsRequest(BaseModel):
 class DeleteDocumentsResponse(BaseModel):
     """Response model for document deletion."""
     status: str = "success"
-    deleted: int 
+    deleted: int
+
+class FileMetadata(BaseModel):
+    """Metadata for a file in the document store."""
+    filename: str
+    namespace: str = "default"
+    document_count: int
+    id: str
+
+class FileListResponse(BaseModel):
+    """Response model for the /files endpoint."""
+    files: List[FileMetadata] 

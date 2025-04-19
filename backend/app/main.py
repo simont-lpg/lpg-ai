@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
 from typing import List, Optional
 from .config import Settings
 from .pipeline import build_pipeline
-from .schema import Query, Response, DocumentMetadata, DocumentFull, DeleteDocumentsRequest, DeleteDocumentsResponse
+from .schema import Query, Response, DocumentMetadata, DocumentFull, DeleteDocumentsRequest, DeleteDocumentsResponse, FileListResponse
 from .ingest import ingest_documents
 from .dependencies import get_document_store, get_embedder
 from pydantic import ConfigDict
@@ -102,4 +102,34 @@ async def delete_documents(
         return DeleteDocumentsResponse(deleted=deleted_count)
     except Exception as e:
         logger.error(f"Error in delete_documents endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.get("/files", response_model=FileListResponse)
+async def get_files(document_store = Depends(get_document_store)):
+    """Get a list of all files in the document store with their metadata."""
+    try:
+        # Get all documents
+        documents = document_store.get_all_documents()
+        
+        # Group documents by filename
+        file_groups = {}
+        for doc in documents:
+            filename = doc.meta.get("file_name", "unknown")
+            namespace = doc.meta.get("namespace", "default")
+            key = (filename, namespace)
+            if key not in file_groups:
+                file_groups[key] = {
+                    "filename": filename,
+                    "namespace": namespace,
+                    "document_count": 0,
+                    "id": doc.id  # Use the first document's ID as the file ID
+                }
+            file_groups[key]["document_count"] += 1
+        
+        # Convert to list and sort by filename
+        files = sorted(file_groups.values(), key=lambda x: x["filename"])
+        
+        return FileListResponse(files=files)
+    except Exception as e:
+        logger.error(f"Error in get_files endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail={"error": str(e)}) 
