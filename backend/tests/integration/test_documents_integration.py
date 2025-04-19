@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-from app.schema import Document
+from app.schema import DocumentFull
 from app.config import Settings
 from app.vectorstore import InMemoryDocumentStore
 from app.dependencies import get_document_store
@@ -34,8 +34,8 @@ def test_integration_smoke(client, mock_store):
     try:
         # Create test documents
         docs = [
-            Document(id="a", content="A", meta={"namespace":"x"}),
-            Document(id="b", content="B", meta={"namespace":"y"}),
+            DocumentFull(id="a", content="A", meta={"namespace":"x"}),
+            DocumentFull(id="b", content="B", meta={"namespace":"y"}),
         ]
         
         # Write documents to store

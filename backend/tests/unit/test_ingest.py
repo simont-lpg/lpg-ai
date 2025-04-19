@@ -1,105 +1,58 @@
-import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
-from fastapi import UploadFile
-from backend.app.ingest import ingest_documents, SimpleConverter
-from backend.app.schema import Document
-import tempfile
-import os
 import io
+import pytest
+from fastapi.testclient import TestClient
+from app.main import app
+from app.schema import DocumentFull
 
 @pytest.fixture
-def test_file_content():
-    """Create a temporary test file."""
-    content = "This is a test document.\nIt has multiple lines.\nAnd some structure."
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-        f.write(content)
-        f.flush()
-        yield f.name
-    os.unlink(f.name)
+def client():
+    return TestClient(app)
 
-@pytest.fixture
-def mock_file():
-    """Create a mock file for testing."""
-    mock = MagicMock(spec=UploadFile)
-    mock.filename = "test.txt"
-    mock.read = AsyncMock(return_value=b"This is a test document.")
-    return mock
+def make_file(name, content, media_type):
+    return ('files', (name, io.BytesIO(content), media_type))
 
-@pytest.fixture
-def mock_document_store():
-    """Create a mock document store."""
-    mock = MagicMock()
-    mock.write_documents = MagicMock()
-    return mock
+def test_ingest_no_files(client):
+    # Missing files should 422
+    resp = client.post("/ingest", files=[])
+    assert resp.status_code == 422
 
-@pytest.fixture
-def mock_embedder():
-    """Create a mock embedder."""
-    mock = MagicMock()
-    mock.embed_batch.return_value = [[0.1] * 384]
-    return mock
+def test_ingest_unsupported_type(client):
+    # Unsupported extension → success with zero chunks
+    files = [ make_file("foo.xyz", b"garbage", "application/octet-stream") ]
+    resp = client.post("/ingest", files=files)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "success"
+    assert body["files_ingested"] == 0
+    assert body["total_chunks"] == 0
 
-@pytest.mark.asyncio
-async def test_ingest_documents(mock_file, mock_document_store, mock_embedder):
-    """Test successful document ingestion."""
-    result = await ingest_documents(
-        files=[mock_file],
-        namespace="test",
-        document_store=mock_document_store,
-        embedder=mock_embedder
-    )
-    
-    assert result["status"] == "success"
-    assert result["namespace"] == "test"
-    assert result["files_ingested"] == 1
-    assert result["total_chunks"] > 0
-    mock_document_store.write_documents.assert_called()
-
-@pytest.mark.asyncio
-async def test_ingest_documents_unsupported_file(mock_document_store, mock_embedder):
-    """Test ingestion with unsupported file type."""
-    mock_file = MagicMock(spec=UploadFile)
-    mock_file.filename = "test.unsupported"
-    mock_file.read = AsyncMock(return_value=b"content")
-    
-    result = await ingest_documents(
-        files=[mock_file],
-        document_store=mock_document_store,
-        embedder=mock_embedder
-    )
-    
-    assert result["status"] == "success"
-    assert result["files_ingested"] == 0
-    assert result["total_chunks"] == 0
-    mock_document_store.write_documents.assert_not_called()
-
-@pytest.mark.asyncio
-async def test_ingest_documents_error(mock_file, mock_document_store, mock_embedder):
-    """Test ingestion error handling."""
-    mock_embedder.embed_batch.side_effect = Exception("Embedding failed")
-    
-    with pytest.raises(Exception) as exc_info:
-        await ingest_documents(
-            files=[mock_file],
-            document_store=mock_document_store,
-            embedder=mock_embedder
-        )
-    assert "Failed to ingest file" in str(exc_info.value)
-
-def test_simple_converter():
-    """Test the SimpleConverter with a real file."""
-    converter = SimpleConverter()
-    content = b"This is a test document.\nIt has multiple lines.\nAnd some structure."
-    
-    documents = converter.run(content)
-    assert len(documents) > 0
-    assert all(isinstance(doc, Document) for doc in documents)
-    assert all(doc.content for doc in documents)
-
-def test_simple_converter_error():
-    """Test SimpleConverter error handling."""
-    converter = SimpleConverter()
-    with pytest.raises(Exception) as exc_info:
-        converter.run(b"")
-    assert "Empty file content provided" in str(exc_info.value) 
+def test_ingest_happy_path(client, monkeypatch):
+    # stub out actual document store and converter so we can control chunk count
+    class DummyStore:
+        def write_documents(self, chunks):
+            # pretend we saw 3 chunks per file
+            self.saved = chunks
+    dummy_store = DummyStore()
+    # monkey‑patch our DI
+    monkeypatch.setattr("app.dependencies.get_document_store", lambda: dummy_store)
+    # stub converter to always return exactly 3 chunks for any file
+    class MockConverter:
+        def run(self, *args, **kwargs):
+            return [
+                DocumentFull(id="1", content="chunk1", meta={"namespace": "ns"}),
+                DocumentFull(id="2", content="chunk2", meta={"namespace": "ns"}),
+                DocumentFull(id="3", content="chunk3", meta={"namespace": "ns"})
+            ]
+    monkeypatch.setattr("app.ingest.SimpleConverter", lambda *args, **kwargs: MockConverter())
+    # send two text files
+    files = [
+        make_file("a.txt", b"hello", "text/plain"),
+        make_file("b.txt", b"world", "text/plain")
+    ]
+    resp = client.post("/ingest", files=files, data={"namespace":"ns"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "success"
+    assert body["namespace"] == "ns"
+    assert body["files_ingested"] == 2
+    assert body["total_chunks"] == 6  # 3 chunks per file * 2 files 

@@ -19,6 +19,30 @@ class Settings(BaseSettings):
             return v
         raise ValueError("URL scheme should be 'http' or 'https'")
 
+    def __hash__(self):
+        """Make Settings hashable based on its field values."""
+        return hash((
+            self.embedding_model,
+            self.embedding_model_name,
+            self.embedding_dim,
+            str(self.ollama_api_url),
+            self.collection_name,
+            self.dev_mode
+        ))
+
+    def __eq__(self, other):
+        """Compare Settings instances for equality."""
+        if not isinstance(other, Settings):
+            return False
+        return (
+            self.embedding_model == other.embedding_model and
+            self.embedding_model_name == other.embedding_model_name and
+            self.embedding_dim == other.embedding_dim and
+            str(self.ollama_api_url) == str(other.ollama_api_url) and
+            self.collection_name == other.collection_name and
+            self.dev_mode == other.dev_mode
+        )
+
     model_config = {
         "env_prefix": "HAYSTACK_",
         "env_file": ".env",

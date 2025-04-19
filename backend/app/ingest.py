@@ -2,14 +2,15 @@ from typing import List, Optional
 from fastapi import UploadFile, Depends
 from unstructured.partition.text import partition_text
 from .dependencies import get_document_store, get_embedder
-from .schema import Document
+from .schema import DocumentFull
+from sentence_transformers import SentenceTransformer
 import io
 import uuid
 
 class SimpleConverter:
     """A simple converter that uses unstructured to convert files to text."""
     
-    def run(self, content: bytes) -> List[Document]:
+    def run(self, content: bytes) -> List[DocumentFull]:
         """Convert file content to documents."""
         if not content:
             raise Exception("Empty file content provided")
@@ -19,7 +20,7 @@ class SimpleConverter:
             file_obj = io.BytesIO(content)
             # Use text partitioner directly for text content
             elements = partition_text(file=file_obj)
-            return [Document(id=str(uuid.uuid4()), content=str(element)) for element in elements]
+            return [DocumentFull(id=str(uuid.uuid4()), content=str(element)) for element in elements]
         except Exception as e:
             raise Exception(f"Failed to convert file content: {str(e)}")
 
@@ -75,7 +76,11 @@ async def ingest_documents(
     if all_documents:
         try:
             # Embed all documents at once
-            embeddings = embedder.embed_batch([doc.content for doc in all_documents])
+            if isinstance(embedder, SentenceTransformer):
+                embeddings = embedder.encode([doc.content for doc in all_documents], convert_to_numpy=True)
+                embeddings = embeddings.tolist()
+            else:
+                embeddings = embedder.embed_batch([doc.content for doc in all_documents])
             
             # Add embeddings to documents
             for doc, embedding in zip(all_documents, embeddings):

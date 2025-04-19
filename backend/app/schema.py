@@ -1,13 +1,24 @@
 from pydantic import BaseModel, Field, field_validator, StrictStr, ConfigDict
 from typing import Optional, Dict, List, Any
 
-class Document(BaseModel):
-    """Document model for storing text content."""
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra='allow')
-    
+class DocumentMetadata(BaseModel):
+    """Lightweight document model for API documentation."""
     content: str
     meta: Dict = {}
     id: Optional[str] = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra='allow')
+
+    def to_dict(self) -> Dict:
+        """Convert document to dictionary."""
+        return {
+            "content": self.content,
+            "meta": self.meta,
+            "id": self.id
+        }
+
+class DocumentFull(DocumentMetadata):
+    """Full document model including embeddings and scores."""
     embedding: Optional[List[float]] = None
     score: Optional[float] = None
 
@@ -22,22 +33,11 @@ class Document(BaseModel):
         }
 
 class Query(BaseModel):
-    """Query model for RAG requests."""
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra='allow')
-    
-    text: StrictStr = Field(alias="query", min_length=1)  # Allow 'query' field for backward compatibility
-    top_k: int = Field(default=5, ge=1)
-
-    @field_validator('text')
-    @classmethod
-    def validate_text(cls, v):
-        if not v.strip():
-            raise ValueError("Query cannot be empty")
-        return v
+    """Query model for RAG queries."""
+    text: StrictStr = Field(min_length=1)
+    top_k: int = Field(default=5, ge=1, le=100)
 
 class Response(BaseModel):
-    """Response model for RAG results."""
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra='allow')
-    
-    answers: List[str]
-    documents: List[Dict[str, Any]]  # Changed to List[Dict] to match the actual response format 
+    """Response model for RAG queries."""
+    answers: List[str] = []
+    documents: List[DocumentMetadata] 

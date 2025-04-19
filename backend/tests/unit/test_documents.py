@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-from app.schema import Document
+from app.schema import DocumentFull
 from app.config import Settings
 from app.dependencies import get_document_store
 from unittest.mock import patch
@@ -13,9 +13,9 @@ def client():
 @pytest.fixture
 def dummy_docs():
     return [
-        Document(id="1", content="doc1", meta={"namespace":"foo"}),
-        Document(id="2", content="doc2", meta={"namespace":"foo"}),
-        Document(id="3", content="doc3", meta={"namespace":"bar"})
+        DocumentFull(id="1", content="A", meta={"namespace": "foo"}),
+        DocumentFull(id="2", content="B", meta={"namespace": "foo"}),
+        DocumentFull(id="3", content="C", meta={"namespace": "bar"})
     ]
 
 @pytest.fixture

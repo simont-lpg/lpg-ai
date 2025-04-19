@@ -3,7 +3,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from fastapi import Depends
 from .config import Settings, get_settings
-from .schema import Document
+from .schema import DocumentFull
 from .vectorstore import InMemoryDocumentStore, OllamaEmbeddings, get_vectorstore
 
 def get_embedder(settings: Settings = Depends(get_settings)):
@@ -41,7 +41,7 @@ class Retriever:
         except Exception as e:
             raise Exception(f"Failed to initialize retriever model: {str(e)}")
     
-    def retrieve(self, query: str, top_k: int = 5) -> list[Document]:
+    def retrieve(self, query: str, top_k: int = 5) -> list[DocumentFull]:
         """Retrieve documents for a query."""
         if not query or not query.strip():
             raise ValueError("Query cannot be empty")
@@ -59,24 +59,36 @@ class Retriever:
             raise Exception(f"Retrieval failed: {str(e)}")
 
 class Pipeline:
-    """Pipeline for document retrieval."""
+    """Pipeline for processing RAG queries."""
     
     def __init__(self, retriever: Retriever):
         self.retriever = retriever
-        self.components = {"retriever": retriever}
+        self.components = {"Retriever": retriever}
     
-    def run(self, query: str, params: Optional[Dict] = None, **kwargs) -> Dict:
-        """Run the pipeline on a query."""
-        if not query or not query.strip():
-            raise ValueError("Query cannot be empty")
-            
-        top_k = params.get("Retriever", {}).get("top_k", 5) if params else 5
+    def run(self, query: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Run the pipeline with the given query and parameters."""
+        if not params:
+            params = {}
+        
         try:
-            return {"documents": self.retriever.retrieve(query, top_k=top_k)}
+            # Get retriever parameters
+            retriever_params = params.get("Retriever", {})
+            top_k = retriever_params.get("top_k", 5)
+            
+            # Retrieve documents
+            documents = self.retriever.retrieve(query, top_k=top_k)
+            
+            return {
+                "documents": documents,
+                "answers": []  # TODO: Add answer generation
+            }
+        except ValueError as e:
+            # Re-raise ValueError without wrapping
+            raise
         except Exception as e:
             raise Exception(f"Pipeline execution failed: {str(e)}")
 
-def build_pipeline(settings: Settings, dev: bool = False, document_store = None) -> tuple[Pipeline, Retriever]:
+def build_pipeline(settings: Settings, dev: bool = False) -> tuple[Pipeline, Retriever]:
     """Build a pipeline with the given settings."""
     try:
         if dev:
@@ -85,12 +97,11 @@ def build_pipeline(settings: Settings, dev: bool = False, document_store = None)
             retriever = Retriever(mock_store, settings)
             return Pipeline(retriever), retriever
         
-        # Build real pipeline
-        if document_store is None:
-            document_store = InMemoryDocumentStore(
-                embedding_dim=settings.embedding_dim,
-                collection_name=settings.collection_name
-            )
+        # Build real pipeline with a default store
+        document_store = InMemoryDocumentStore(
+            embedding_dim=settings.embedding_dim,
+            collection_name=settings.collection_name
+        )
         retriever = Retriever(document_store, settings)
         retriever.initialize()  # Initialize the retriever
         return Pipeline(retriever), retriever
@@ -98,6 +109,6 @@ def build_pipeline(settings: Settings, dev: bool = False, document_store = None)
         raise Exception(f"Failed to build pipeline: {str(e)}")
 
 def get_pipeline(settings: Settings = Depends(get_settings)) -> Pipeline:
-    """Get a pipeline instance with dependency injection."""
-    pipeline, _ = build_pipeline(settings=settings, dev=settings.dev_mode)
+    """Get pipeline dependency."""
+    pipeline, _ = build_pipeline(settings)
     return pipeline 

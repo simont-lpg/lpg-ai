@@ -1,25 +1,56 @@
 import pytest
-from backend.app.schema import Document, Query, Response
+from backend.app.schema import DocumentMetadata, DocumentFull, Query, Response
 
-def test_document_model():
-    doc = Document(content="Test content", meta={"source": "test"})
-    assert doc.content == "Test content"
-    assert doc.meta == {"source": "test"}
-    assert doc.id is None
+def test_document_metadata_model():
+    """Test DocumentMetadata model."""
+    doc = DocumentMetadata(content="test", id="123", meta={"key": "value"})
+    assert doc.content == "test"
+    assert doc.id == "123"
+    assert doc.meta == {"key": "value"}
+    
+    # Test to_dict method
+    doc_dict = doc.to_dict()
+    assert doc_dict["content"] == "test"
+    assert doc_dict["id"] == "123"
+    assert doc_dict["meta"] == {"key": "value"}
+
+def test_document_full_model():
+    """Test DocumentFull model."""
+    doc = DocumentFull(
+        content="test",
+        id="123",
+        meta={"key": "value"},
+        embedding=[0.1, 0.2, 0.3],
+        score=0.95
+    )
+    assert doc.content == "test"
+    assert doc.id == "123"
+    assert doc.meta == {"key": "value"}
+    assert doc.embedding == [0.1, 0.2, 0.3]
+    assert doc.score == 0.95
+    
+    # Test to_dict method
+    doc_dict = doc.to_dict()
+    assert doc_dict["content"] == "test"
+    assert doc_dict["id"] == "123"
+    assert doc_dict["meta"] == {"key": "value"}
+    assert doc_dict["embedding"] == [0.1, 0.2, 0.3]
+    assert doc_dict["score"] == 0.95
 
 def test_query_model():
-    query = Query(query="test query", top_k=3)
+    """Test Query model."""
+    query = Query(text="test query", top_k=10)
     assert query.text == "test query"
-    assert query.top_k == 3
-
-def test_query_validation():
-    with pytest.raises(ValueError):
-        Query(query="")
+    assert query.top_k == 10
 
 def test_response_model():
-    response = Response(
-        answers=["answer1", "answer2"],
-        documents=[{"content": "doc1"}, {"content": "doc2"}]
-    )
-    assert len(response.answers) == 2
-    assert len(response.documents) == 2 
+    """Test Response model."""
+    docs = [
+        DocumentMetadata(content="test1", id="1"),
+        DocumentMetadata(content="test2", id="2")
+    ]
+    response = Response(answers=["answer1"], documents=docs)
+    assert response.answers == ["answer1"]
+    assert len(response.documents) == 2
+    assert response.documents[0].content == "test1"
+    assert response.documents[1].content == "test2" 

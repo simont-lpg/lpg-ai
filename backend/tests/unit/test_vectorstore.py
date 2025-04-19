@@ -1,6 +1,6 @@
 from backend.app.vectorstore import get_vectorstore, InMemoryDocumentStore, OllamaEmbeddings
 from backend.app.config import Settings
-from backend.app.schema import Document
+from backend.app.schema import DocumentFull
 import pytest
 import numpy as np
 from unittest.mock import patch, MagicMock
@@ -8,49 +8,54 @@ from unittest.mock import patch, MagicMock
 @pytest.fixture
 def mock_embeddings():
     """Mock embeddings model for testing."""
-    mock = MagicMock()
-    mock.embed_batch.return_value = [np.array([0.1] * 384)]
-    mock.encode.return_value = np.array([0.1] * 384)
-    return mock
+    class MockEmbeddings:
+        def encode(self, text):
+            return np.zeros(384)  # Return zero vector
+        def embed_batch(self, texts):
+            return [np.zeros(384) for _ in texts]  # Return zero vectors
+    return MockEmbeddings()
 
 def test_vectorstore_initialization():
-    """Test vectorstore initialization with default settings."""
+    """Test basic vectorstore initialization."""
     settings = Settings()
-    with patch('backend.app.vectorstore.OllamaEmbeddings') as mock_ollama:
-        mock_ollama.return_value = MagicMock()
-        mock_ollama.return_value.embed_batch.return_value = [np.array([0.1] * 384)]
-        vectorstore = get_vectorstore(settings)
-        assert isinstance(vectorstore, InMemoryDocumentStore)
-        assert vectorstore.embedding_dim == 384
+    store = InMemoryDocumentStore(
+        embedding_dim=settings.embedding_dim,
+        collection_name=settings.collection_name
+    )
+    assert store.embedding_dim == settings.embedding_dim
+    assert store.collection_name == settings.collection_name
+    assert len(store.documents) == 0
+    assert len(store.embeddings) == 0
 
 def test_vectorstore_custom_settings():
-    """Test vectorstore initialization with custom settings."""
-    settings = Settings(
-        collection_name="custom_collection",
-        embedding_dim=384,
-        embedding_model_name="custom-model"
+    """Test vectorstore with custom settings."""
+    store = InMemoryDocumentStore(
+        embedding_dim=512,
+        collection_name="custom"
     )
-    with patch('backend.app.vectorstore.OllamaEmbeddings') as mock_ollama:
-        mock_ollama.return_value = MagicMock()
-        mock_ollama.return_value.embed_batch.return_value = [np.array([0.1] * 384)]
-        vectorstore = get_vectorstore(settings)
-        assert isinstance(vectorstore, InMemoryDocumentStore)
-        assert vectorstore.collection_name == "custom_collection"
+    assert store.embedding_dim == 512
+    assert store.collection_name == "custom"
 
 def test_vectorstore_error_handling():
-    """Test vectorstore error handling for invalid configurations."""
-    settings = Settings(
-        embedding_model_name="mxbai-embed-large:latest",
-        ollama_api_url="http://invalid:11434"
+    """Test vectorstore error handling."""
+    settings = Settings()
+    store = InMemoryDocumentStore(
+        embedding_dim=settings.embedding_dim,
+        collection_name=settings.collection_name,
+        embeddings_model=None  # This will cause an error when trying to encode
     )
-    with patch('backend.app.vectorstore.OllamaEmbeddings', side_effect=Exception("Connection failed")):
-        with pytest.raises(Exception, match="Failed to initialize vectorstore"):
-            get_vectorstore(settings)
+    
+    # Test writing document without a valid embeddings model
+    doc = DocumentFull(content="test", id="1")
+    with pytest.raises(Exception) as exc_info:
+        store.model = None  # Force model to be None
+        store.write_documents([doc])
+    assert "Failed to generate embeddings" in str(exc_info.value)
 
 def test_vectorstore_basic_operations(mock_embeddings):
     """Test basic vectorstore operations."""
     settings = Settings()
-    vectorstore = InMemoryDocumentStore(
+    store = InMemoryDocumentStore(
         embedding_dim=settings.embedding_dim,
         collection_name=settings.collection_name,
         embeddings_model=mock_embeddings
@@ -58,43 +63,39 @@ def test_vectorstore_basic_operations(mock_embeddings):
     
     # Test document writing
     docs = [
-        Document(content="Test document 1", id="test1"),
-        Document(content="Test document 2", id="test2")
+        DocumentFull(content="Test document 1", id="test1"),
+        DocumentFull(content="Test document 2", id="test2")
     ]
-    vectorstore.write_documents(docs)
-    assert len(vectorstore.documents) == 2
-    assert len(vectorstore.embeddings) == 2
-    assert all(isinstance(emb, np.ndarray) for emb in vectorstore.embeddings)
-    assert all(emb.shape == (384,) for emb in vectorstore.embeddings)
+    store.write_documents(docs)
+    assert len(store.documents) == 2
+    assert len(store.embeddings) == 2
+    assert all(isinstance(emb, np.ndarray) for emb in store.embeddings)
+    assert all(emb.shape == (384,) for emb in store.embeddings)
     
     # Test document deletion
-    vectorstore.delete_documents(["test1"])
-    assert len(vectorstore.documents) == 1
-    assert len(vectorstore.embeddings) == 1
+    store.delete_documents(["test1"])
+    assert len(store.documents) == 1
+    assert len(store.embeddings) == 1
 
 def test_vectorstore_ollama_config():
-    """Test vectorstore configuration with Ollama embeddings."""
-    settings = Settings(
-        embedding_model_name="mxbai-embed-large:latest",
-        ollama_api_url="http://localhost:11434"
+    """Test vectorstore with Ollama configuration."""
+    settings = Settings()
+    settings.embedding_model_name = "mxbai-embed-large:latest"
+    settings.ollama_api_url = "http://localhost:11434"
+    
+    embedder = OllamaEmbeddings(
+        api_url=str(settings.ollama_api_url),
+        model_name=settings.embedding_model_name,
+        embedding_dim=settings.embedding_dim
     )
-    with patch('backend.app.vectorstore.OllamaEmbeddings') as mock_ollama:
-        mock_ollama.return_value = MagicMock()
-        mock_ollama.return_value.embed_batch.return_value = [np.array([0.1] * 384)]
-        vectorstore = get_vectorstore(settings)
-        assert vectorstore.model is not None
-        assert hasattr(vectorstore.model, 'embed_batch')
-        # Test the embed_batch method
-        result = vectorstore.model.embed_batch(["test1"])
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert isinstance(result[0], np.ndarray)
-        assert result[0].shape == (384,)
+    assert embedder.api_url == str(settings.ollama_api_url)
+    assert embedder.model_name == settings.embedding_model_name
+    assert embedder.embedding_dim == settings.embedding_dim
 
 def test_vectorstore_query_operations(mock_embeddings):
     """Test vectorstore query operations."""
     settings = Settings()
-    vectorstore = InMemoryDocumentStore(
+    store = InMemoryDocumentStore(
         embedding_dim=settings.embedding_dim,
         collection_name=settings.collection_name,
         embeddings_model=mock_embeddings
@@ -102,46 +103,46 @@ def test_vectorstore_query_operations(mock_embeddings):
     
     # Add test documents
     docs = [
-        Document(content="Test document 1", id="1"),
-        Document(content="Test document 2", id="2")
+        DocumentFull(content="Test document 1", id="1"),
+        DocumentFull(content="Test document 2", id="2")
     ]
-    vectorstore.write_documents(docs)
+    store.write_documents(docs)
     
     # Verify embeddings are created
-    assert len(vectorstore.embeddings) == 2
-    assert all(isinstance(emb, np.ndarray) for emb in vectorstore.embeddings)
-    assert all(emb.shape == (384,) for emb in vectorstore.embeddings)
+    assert len(store.embeddings) == 2
+    assert all(isinstance(emb, np.ndarray) for emb in store.embeddings)
+    assert all(emb.shape == (384,) for emb in store.embeddings)
     
     # Test querying with zero vector
     query_embedding = np.zeros(settings.embedding_dim)
-    results = vectorstore.query_by_embedding(query_embedding, top_k=1)
+    results = store.query_by_embedding(query_embedding, top_k=1)
     assert len(results) == 1
-    assert isinstance(results[0], Document)
+    assert isinstance(results[0], DocumentFull)
 
 def test_vectorstore_write_documents(mock_embeddings):
     """Test writing documents to the vectorstore."""
     settings = Settings()
-    vectorstore = InMemoryDocumentStore(
+    store = InMemoryDocumentStore(
         embedding_dim=settings.embedding_dim,
         collection_name=settings.collection_name,
         embeddings_model=mock_embeddings
     )
     
     documents = [
-        Document(content="Test document 1"),
-        Document(content="Test document 2")
+        DocumentFull(content="Test document 1"),
+        DocumentFull(content="Test document 2")
     ]
     
-    vectorstore.write_documents(documents)
-    assert len(vectorstore.documents) == 2
-    assert len(vectorstore.embeddings) == 2
-    assert all(isinstance(emb, np.ndarray) for emb in vectorstore.embeddings)
-    assert all(emb.shape == (384,) for emb in vectorstore.embeddings)
+    store.write_documents(documents)
+    assert len(store.documents) == 2
+    assert len(store.embeddings) == 2
+    assert all(isinstance(emb, np.ndarray) for emb in store.embeddings)
+    assert all(emb.shape == (384,) for emb in store.embeddings)
 
 def test_vectorstore_delete_documents(mock_embeddings):
     """Test deleting documents from the vectorstore."""
     settings = Settings()
-    vectorstore = InMemoryDocumentStore(
+    store = InMemoryDocumentStore(
         embedding_dim=settings.embedding_dim,
         collection_name=settings.collection_name,
         embeddings_model=mock_embeddings
@@ -149,17 +150,17 @@ def test_vectorstore_delete_documents(mock_embeddings):
     
     # Add test documents
     documents = [
-        Document(content="Test document 1", id="1"),
-        Document(content="Test document 2", id="2")
+        DocumentFull(content="Test document 1", id="1"),
+        DocumentFull(content="Test document 2", id="2")
     ]
-    vectorstore.write_documents(documents)
+    store.write_documents(documents)
     
     # Verify initial state
-    assert len(vectorstore.documents) == 2
-    assert len(vectorstore.embeddings) == 2
+    assert len(store.documents) == 2
+    assert len(store.embeddings) == 2
     
     # Delete one document
-    vectorstore.delete_documents(["1"])
-    assert len(vectorstore.documents) == 1
-    assert len(vectorstore.embeddings) == 1
-    assert vectorstore.documents[0].id == "2" 
+    store.delete_documents(["1"])
+    assert len(store.documents) == 1
+    assert len(store.embeddings) == 1
+    assert store.documents[0].id == "2" 

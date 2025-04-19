@@ -1,38 +1,38 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import numpy as np
 import os
 import requests
 from sentence_transformers import SentenceTransformer
 from .config import Settings
-from .schema import Document
+from .schema import DocumentFull
 
 class OllamaEmbeddings:
-    """Ollama-based embeddings implementation."""
+    """Embeddings using Ollama API."""
     
-    def __init__(self, api_url: str, model_name: str, embedding_dim: int = 384):
-        self.url = api_url.rstrip("/") + "/api/embed"
-        self.model = model_name
+    def __init__(self, api_url: str, model_name: str, embedding_dim: int):
+        self.api_url = api_url
+        self.model_name = model_name
         self.embedding_dim = embedding_dim
     
+    def embed(self, text: str) -> List[float]:
+        """Get embedding for a single text."""
+        response = requests.post(
+            f"{self.api_url}/api/embeddings",
+            json={"model": self.model_name, "prompt": text}
+        )
+        if response.status_code != 200:
+            raise Exception(f"Failed to get embedding: {response.text}")
+        return response.json()["embedding"][:self.embedding_dim]
+    
     def embed_batch(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings for a batch of texts using Ollama."""
-        try:
-            resp = requests.post(
-                self.url,
-                json={"model": self.model, "input": texts}
-            )
-            resp.raise_for_status()
-            embeddings = resp.json()["embeddings"]
-            # Ensure embeddings have the correct dimension
-            return [np.array(emb[:self.embedding_dim]) for emb in embeddings]
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"Failed to get embeddings from Ollama: {str(e)}")
+        """Get embeddings for a batch of texts."""
+        return [self.embed(text) for text in texts]
 
 class InMemoryDocumentStore:
     """Simple in-memory document store with vector similarity search."""
     
     def __init__(self, embedding_dim: int = 384, collection_name: str = "documents", embeddings_model=None):
-        self.documents: List[Document] = []
+        self.documents: List[DocumentFull] = []
         self.embeddings: List[np.ndarray] = []
         self.embedding_dim = embedding_dim
         self._collection_name = collection_name
@@ -46,7 +46,7 @@ class InMemoryDocumentStore:
         """Get the collection name."""
         return self._collection_name
     
-    def write_documents(self, documents: List[Document]):
+    def write_documents(self, documents: List[DocumentFull]):
         """Write documents to the store."""
         for doc in documents:
             if not doc.id:
@@ -81,7 +81,7 @@ class InMemoryDocumentStore:
             del self.documents[i]
             del self.embeddings[i]
     
-    def get_all_documents(self, filters: Optional[dict] = None) -> List[Document]:
+    def get_all_documents(self, filters: Optional[dict] = None) -> List[DocumentFull]:
         """Get all documents, optionally filtered by metadata."""
         if not filters:
             return self.documents
@@ -97,7 +97,7 @@ class InMemoryDocumentStore:
                 filtered_docs.append(doc)
         return filtered_docs
     
-    def query_by_embedding(self, query_embedding: np.ndarray, top_k: int = 5) -> List[Document]:
+    def query_by_embedding(self, query_embedding: np.ndarray, top_k: int = 5) -> List[DocumentFull]:
         """Query documents by embedding similarity."""
         if not self.documents:
             return []

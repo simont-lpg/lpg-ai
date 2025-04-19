@@ -2,9 +2,10 @@ from typing import Generator, List
 from fastapi import Depends
 from .config import Settings, get_settings
 from .vectorstore import get_vectorstore, OllamaEmbeddings, InMemoryDocumentStore
-from .schema import Document
+from .schema import DocumentFull
 from sentence_transformers import SentenceTransformer
 import numpy as np
+from functools import lru_cache
 
 # Global document store instance
 _document_store = None
@@ -25,21 +26,41 @@ class Embedder:
         else:
             raise ValueError(f"Unsupported model type: {type(self.model)}")
 
-def get_document_store(settings: Settings = Depends(get_settings)) -> InMemoryDocumentStore:
-    """Get document store dependency."""
-    global _document_store
-    if _document_store is None:
-        _document_store = get_vectorstore(settings)
-    return _document_store
-
+@lru_cache()
 def get_embedder(settings: Settings = Depends(get_settings)):
-    """Get embedder dependency."""
-    if settings.embedding_model_name == "mxbai-embed-large:latest":
-        model = OllamaEmbeddings(
-            api_url=str(settings.ollama_api_url),
-            model_name=settings.embedding_model_name,
-            embedding_dim=settings.embedding_dim
-        )
-    else:
-        model = SentenceTransformer(settings.embedding_model)
-    return Embedder(model) 
+    """Get embedder model based on settings."""
+    try:
+        if settings.embedding_model_name == "mxbai-embed-large:latest":
+            return OllamaEmbeddings(
+                api_url=str(settings.ollama_api_url),
+                model_name=settings.embedding_model_name,
+                embedding_dim=settings.embedding_dim
+            )
+        return SentenceTransformer(settings.embedding_model)
+    except Exception as e:
+        raise Exception(f"Failed to initialize embedder: {str(e)}")
+
+def get_document_store(settings: Settings = Depends(get_settings)) -> InMemoryDocumentStore:
+    """Get document store instance."""
+    global _document_store
+    
+    if _document_store is None:
+        try:
+            if settings.embedding_model_name == "mxbai-embed-large:latest":
+                model = OllamaEmbeddings(
+                    api_url=str(settings.ollama_api_url),
+                    model_name=settings.embedding_model_name,
+                    embedding_dim=settings.embedding_dim
+                )
+            else:
+                model = SentenceTransformer(settings.embedding_model)
+            
+            _document_store = InMemoryDocumentStore(
+                embedding_dim=settings.embedding_dim,
+                collection_name=settings.collection_name,
+                embeddings_model=model
+            )
+        except Exception as e:
+            raise Exception(f"Failed to initialize document store: {str(e)}")
+    
+    return _document_store 

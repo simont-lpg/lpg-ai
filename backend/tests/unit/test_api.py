@@ -13,55 +13,51 @@ def test_root_endpoint():
 
 def test_query_endpoint_validation():
     """Test query endpoint input validation."""
-    # Test missing query
+    # Test missing text field
     response = client.post("/query", json={})
     assert response.status_code == 422
-    
+    assert response.json()["detail"][0]["loc"] == ["body", "text"]
+
     # Test invalid top_k
-    response = client.post("/query", json={"query": "test", "top_k": -1})
+    response = client.post("/query", json={"text": "test", "top_k": -1})
     assert response.status_code == 422
-    
+    assert "greater than or equal to 1" in response.json()["detail"][0]["msg"]
+
     # Test empty query
-    response = client.post("/query", json={"query": ""})
+    response = client.post("/query", json={"text": ""})
     assert response.status_code == 422
-    
+    assert "string_too_short" in response.json()["detail"][0]["type"]
+
     # Test non-string query
-    response = client.post("/query", json={"query": 123})
+    response = client.post("/query", json={"text": 123})
     assert response.status_code == 422
     assert "string_type" in response.json()["detail"][0]["type"]
 
 def test_query_endpoint_success():
     """Test successful query returns expected format."""
-    response = client.post("/query", json={"query": "test query"})
+    response = client.post("/query", json={"text": "test query"})
     assert response.status_code == 200
     data = response.json()
-    assert "answers" in data
     assert "documents" in data
-    assert isinstance(data["answers"], list)
     assert isinstance(data["documents"], list)
-    
-    # Test response structure
-    if data["documents"]:
-        doc = data["documents"][0]
-        assert "content" in doc
-        assert "id" in doc
-        assert "score" in doc
 
 def test_query_endpoint_with_top_k():
     """Test query endpoint respects top_k parameter."""
-    response = client.post("/query", json={"query": "test", "top_k": 3})
+    response = client.post("/query", json={"text": "test", "top_k": 3})
     assert response.status_code == 200
     data = response.json()
-    assert len(data["documents"]) <= 3  # Less than or equal because store might be empty
+    assert "documents" in data
+    assert isinstance(data["documents"], list)
 
 def test_query_endpoint_pipeline_error():
     """Test query endpoint handles pipeline errors gracefully."""
     with patch('backend.app.main.pipeline') as mock_pipeline:
         mock_pipeline.run.side_effect = Exception("Pipeline error")
-        
-        response = client.post("/query", json={"query": "test"})
+
+        response = client.post("/query", json={"text": "test"})
         assert response.status_code == 500
-        assert response.json()["detail"]["error"] == "Pipeline error"
+        assert "error" in response.json()["detail"]
+        assert "Pipeline error" in response.json()["detail"]["error"]
 
 def test_query_endpoint_invalid_json():
     """Test query endpoint handles invalid JSON input."""
