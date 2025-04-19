@@ -1,83 +1,95 @@
-import styled from 'styled-components';
-import { Link, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { LogoContainer, UploadButton, DocumentList, DocumentListItem } from '../styles/layout';
+import logo from '../assets/LPG-Full-White.svg';
 
-const SidebarContainer = styled.aside`
-  width: 240px;
-  background: ${({ theme }) => theme.colors.primary};
-  padding: ${({ theme }) => theme.spacing.medium};
-  display: flex;
-  flex-direction: column;
-`;
+interface Document {
+  id: string;
+  name: string;
+}
 
-const Logo = styled.img`
-  width: 100%;
-  margin-bottom: ${({ theme }) => theme.spacing.large};
-`;
+interface SidebarProps {
+  onSelectDoc: (docId: string) => void;
+}
 
-const Nav = styled.nav`
-  flex: 1;
-`;
+export const Sidebar = ({ onSelectDoc }: SidebarProps) => {
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-const NavList = styled.ul`
-  list-style: none;
-  padding: 0;
-  margin: 0;
-`;
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
 
-const NavItem = styled.li`
-  margin-bottom: ${({ theme }) => theme.spacing.medium};
-`;
+  const fetchDocuments = async () => {
+    try {
+      const response = await fetch('/documents');
+      const data = await response.json();
+      setDocuments(data);
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+    }
+  };
 
-const NavLink = styled(Link)<{ $isActive: boolean }>`
-  color: ${({ theme }) => theme.colors.white};
-  text-decoration: none;
-  font-size: ${({ theme }) => theme.typography.fontSize.medium};
-  font-weight: ${({ $isActive }) => ($isActive ? 'bold' : 'normal')};
-  display: block;
-  padding: ${({ theme }) => theme.spacing.small} 0;
-  
-  &:hover {
-    opacity: 0.8;
-  }
-`;
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-export const Sidebar = () => {
-  const location = useLocation();
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      await fetch('/ingest', {
+        method: 'POST',
+        body: formData,
+      });
+      fetchDocuments();
+    } catch (error) {
+      console.error('Error uploading file:', error);
+    }
+  };
+
+  const handleDocSelect = (docId: string) => {
+    setSelectedDocId(docId);
+    onSelectDoc(docId);
+  };
 
   return (
-    <SidebarContainer>
-      <Logo
-        src="https://learnprogroup.com/wp-content/uploads/2024/09/LPG-Full-White.svg"
-        alt="LearnPro Group logo"
+    <aside>
+      <LogoContainer>
+        <img 
+          src={logo} 
+          alt="LearnPro Group" 
+          style={{ 
+            width: '180px', 
+            height: '40px',
+            objectFit: 'contain'
+          }} 
+        />
+      </LogoContainer>
+      
+      <UploadButton onClick={() => fileInputRef.current?.click()}>
+        Upload
+      </UploadButton>
+
+      <input
+        type="file"
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        onChange={handleFileUpload}
+        data-testid="file-input"
       />
-      <Nav>
-        <NavList>
-          <NavItem>
-            <NavLink
-              to="/ingest"
-              $isActive={location.pathname === '/ingest'}
-            >
-              Ingest
-            </NavLink>
-          </NavItem>
-          <NavItem>
-            <NavLink
-              to="/documents"
-              $isActive={location.pathname === '/documents'}
-            >
-              Documents
-            </NavLink>
-          </NavItem>
-          <NavItem>
-            <NavLink
-              to="/query"
-              $isActive={location.pathname === '/query'}
-            >
-              Query
-            </NavLink>
-          </NavItem>
-        </NavList>
-      </Nav>
-    </SidebarContainer>
+
+      <DocumentList>
+        {documents.map((doc) => (
+          <DocumentListItem
+            key={doc.id}
+            selected={doc.id === selectedDocId}
+            onClick={() => handleDocSelect(doc.id)}
+          >
+            {doc.name}
+          </DocumentListItem>
+        ))}
+      </DocumentList>
+    </aside>
   );
 }; 

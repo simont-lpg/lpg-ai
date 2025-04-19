@@ -1,34 +1,33 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import styled from 'styled-components';
+import { useState } from 'react';
 import { Sidebar } from './components/Sidebar';
-import { Ingest } from './components/Ingest';
-import { Documents } from './components/Documents';
-import { Query } from './components/Query';
-
-const AppContainer = styled.div`
-  display: flex;
-  height: 100vh;
-`;
-
-const MainContent = styled.main`
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: ${({ theme }) => theme.colors.background};
-`;
+import { DocumentExplorer } from './components/DocumentExplorer';
+import { DocumentPreview } from './components/DocumentPreview';
+import {
+  AppContainer,
+  MainContent,
+  WorkArea,
+  DetailPanel,
+} from './styles/layout';
 
 function App() {
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+
   return (
     <Router>
       <AppContainer>
-        <Sidebar />
+        <Sidebar onSelectDoc={setSelectedDocId} />
         <MainContent>
-          <Routes>
-            <Route path="/ingest" element={<Ingest />} />
-            <Route path="/documents" element={<Documents />} />
-            <Route path="/query" element={<Query />} />
-            <Route path="/" element={<Ingest />} />
-          </Routes>
+          <WorkArea>
+            <Routes>
+              <Route path="/documents" element={<DocumentExplorer />} />
+              <Route path="/query" element={<DocumentExplorer />} />
+              <Route path="/" element={<DocumentExplorer />} />
+            </Routes>
+          </WorkArea>
+          <DetailPanel>
+            <DocumentPreview selectedDocId={selectedDocId} />
+          </DetailPanel>
         </MainContent>
       </AppContainer>
     </Router>
