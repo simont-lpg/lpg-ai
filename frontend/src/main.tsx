@@ -14,8 +14,8 @@ const GlobalStyle = createGlobalStyle`
 
   body {
     font-family: ${({ theme }) => theme.typography.fontFamily};
-    background: ${({ theme }) => theme.colors.background};
-    color: ${({ theme }) => theme.colors.text};
+    background-color: ${({ theme }) => theme.palette.background.default};
+    color: ${({ theme }) => theme.palette.text.primary};
   }
 `;
 
