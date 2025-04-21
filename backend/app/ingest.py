@@ -63,9 +63,12 @@ async def ingest_documents(
             # Convert to document
             documents = converter.run(content)
             
-            # Add namespace to documents only if it's provided
+            # Add namespace and filename to documents
             for doc in documents:
-                doc.meta = {"namespace": namespace} if namespace is not None else {}
+                doc.meta = {
+                    "namespace": namespace if namespace is not None else "default",
+                    "file_name": file.filename
+                }
             
             all_documents.extend(documents)
             total_chunks += len(documents)
