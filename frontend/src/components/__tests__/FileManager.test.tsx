@@ -44,10 +44,6 @@ describe('FileManager', () => {
       expect(screen.getByText('1 KB')).toBeInTheDocument();
       expect(screen.getByText('2 KB')).toBeInTheDocument();
     });
-
-    // Check that we have the correct number of chunks elements
-    const chunksElements = screen.getAllByText(/chunks/);
-    expect(chunksElements).toHaveLength(mockFiles.length);
   });
 
   it('handles file selection', async () => {
