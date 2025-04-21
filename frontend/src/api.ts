@@ -1,28 +1,39 @@
-const API_BASE_URL = 'http://localhost:8000';
+import { config } from './config';
 
 export interface File {
-  name: string;
+  filename: string;
+  namespace: string;
+  document_count: number;
   id: string;
+  file_size: number;  // Size in bytes
+}
+
+interface FileListResponse {
+  files: File[];
 }
 
 export interface QueryResponse {
-  answer: string;
-  sources: Array<{
+  answers: string[];
+  documents: Array<{
     content: string;
-    metadata: Record<string, any>;
+    meta: Record<string, any>;
+    id: string;
+    score?: number;
   }>;
+  error?: string;
 }
 
 export const listFiles = async (): Promise<File[]> => {
-  const response = await fetch(`${API_BASE_URL}/files`);
+  const response = await fetch(config.api.endpoints.files);
   if (!response.ok) {
     throw new Error('Failed to fetch files');
   }
-  return response.json();
+  const data: FileListResponse = await response.json();
+  return data.files;
 };
 
 export const deleteDocument = async (fileName: string): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/documents`, {
+  const response = await fetch(config.api.endpoints.documents, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
@@ -40,12 +51,14 @@ export const uploadFiles = async (files: FileList): Promise<void> => {
     formData.append('files', file);
   });
 
-  const response = await fetch(`${API_BASE_URL}/upload`, {
+  const response = await fetch(config.api.endpoints.ingest, {
     method: 'POST',
     body: formData,
   });
+  
   if (!response.ok) {
-    throw new Error('Failed to upload files');
+    const errorData = await response.json();
+    throw new Error(errorData.detail?.error || 'Failed to upload files');
   }
 };
 
@@ -54,7 +67,7 @@ export const queryRAG = async (
   topK: number = 3,
   fileId?: string
 ): Promise<QueryResponse> => {
-  const response = await fetch(`${API_BASE_URL}/query`, {
+  const response = await fetch(config.api.endpoints.query, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

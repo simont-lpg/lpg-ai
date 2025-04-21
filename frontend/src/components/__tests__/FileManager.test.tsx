@@ -18,8 +18,8 @@ jest.mock('@chakra-ui/react', () => ({
 
 describe('FileManager', () => {
   const mockFiles = [
-    { id: '1', name: 'test1.pdf' },
-    { id: '2', name: 'test2.pdf' },
+    { filename: 'test1.pdf', id: '1', namespace: 'default', document_count: 1, file_size: 1024 },
+    { filename: 'test2.pdf', id: '2', namespace: 'default', document_count: 1, file_size: 2048 },
   ];
 
   beforeEach(() => {
@@ -40,8 +40,14 @@ describe('FileManager', () => {
     });
 
     mockFiles.forEach((file) => {
-      expect(screen.getByText(file.name)).toBeInTheDocument();
+      expect(screen.getByText(file.filename)).toBeInTheDocument();
+      expect(screen.getByText('1 KB')).toBeInTheDocument();
+      expect(screen.getByText('2 KB')).toBeInTheDocument();
     });
+
+    // Check that we have the correct number of chunks elements
+    const chunksElements = screen.getAllByText(/chunks/);
+    expect(chunksElements).toHaveLength(mockFiles.length);
   });
 
   it('handles file selection', async () => {

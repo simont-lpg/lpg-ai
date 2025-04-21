@@ -16,11 +16,13 @@ jest.mock('@chakra-ui/react', () => ({
 
 describe('Chat', () => {
   const mockResponse = {
-    answer: 'Test answer',
-    sources: [
+    answers: ['Test answer'],
+    documents: [
       {
         content: 'Source content',
-        metadata: { source: 'test.pdf' },
+        meta: { source: 'test.pdf' },
+        id: '1',
+        score: 0.8
       },
     ],
   };

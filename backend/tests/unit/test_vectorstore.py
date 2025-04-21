@@ -50,7 +50,7 @@ def test_vectorstore_error_handling():
     with pytest.raises(Exception) as exc_info:
         store.model = None  # Force model to be None
         store.write_documents([doc])
-    assert "Failed to generate embeddings" in str(exc_info.value)
+    assert "Failed to process embeddings for document" in str(exc_info.value)
 
 def test_vectorstore_basic_operations(mock_embeddings):
     """Test basic vectorstore operations."""

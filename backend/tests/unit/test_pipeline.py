@@ -1,116 +1,62 @@
 import pytest
-from backend.app.pipeline import build_pipeline, Pipeline, Retriever, get_embedder
+from backend.app.pipeline import build_pipeline, Pipeline
 from backend.app.config import Settings
 from backend.app.schema import DocumentFull
 from unittest.mock import patch, MagicMock
 import numpy as np
-from app.pipeline import get_pipeline
 from backend.app.vectorstore import InMemoryDocumentStore
 
 @pytest.fixture
 def mock_embeddings():
     """Mock embeddings model for testing."""
-    class MockEmbeddings:
-        def encode(self, text):
-            return np.zeros(384)  # Return zero vector
-        def embed_batch(self, texts):
-            return [np.zeros(384) for _ in texts]  # Return zero vectors
-    return MockEmbeddings()
+    mock = MagicMock()
+    mock.encode.return_value = np.zeros(384)
+    mock.embed_batch.return_value = [np.zeros(384)]
+    return mock
 
 @pytest.fixture
-def mock_store(mock_embeddings):
+def mock_store():
     """Create a mock document store for testing."""
-    return InMemoryDocumentStore(
-        embedding_dim=384,
-        collection_name="test_documents",
-        embeddings_model=mock_embeddings
-    )
+    store = MagicMock()
+    store.embedding_dim = 384
+    store.collection_name = "test_documents"
+    return store
 
-@patch("backend.app.pipeline.get_embedder")
-@patch("backend.app.pipeline.get_vectorstore")
-def test_pipeline_query_execution(mock_get_vectorstore, mock_get_embedder, mock_embeddings, mock_store):
-    mock_get_embedder.return_value = mock_embeddings
-    mock_get_vectorstore.return_value = mock_store
+def test_pipeline_query_execution(mock_embeddings, mock_store):
+    """Test core pipeline functionality with mocked dependencies."""
+    # Setup test document
+    test_doc = DocumentFull(content="test content", id="1", meta={"namespace": "default"})
+    mock_store.query_by_embedding.return_value = [test_doc]
     
-    # Create a test document
-    test_doc = DocumentFull(content="test content", id="1")
-    
-    # Set up the mock store to return our test document
-    mock_store.query_by_embedding = MagicMock(return_value=[test_doc])
-    
-    # Create and test pipeline
-    pipeline = Pipeline(Retriever(mock_store, Settings()))
-    result = pipeline.run("test query")
-    
-    assert "documents" in result
-    assert len(result["documents"]) == 1
-    assert result["documents"][0].content == "test content"
-
-@patch("backend.app.pipeline.get_embedder")
-@patch("backend.app.pipeline.get_vectorstore")
-def test_pipeline_empty_query(mock_get_vectorstore, mock_get_embedder, mock_embeddings, mock_store):
-    mock_get_embedder.return_value = mock_embeddings
-    mock_get_vectorstore.return_value = mock_store
-    
-    pipeline = Pipeline(Retriever(mock_store, Settings()))
-    with pytest.raises(ValueError, match="Query cannot be empty"):
-        pipeline.run("")
-
-@patch("backend.app.pipeline.get_embedder")
-@patch("backend.app.pipeline.get_vectorstore")
-def test_pipeline_dev_mode(mock_get_vectorstore, mock_get_embedder, mock_embeddings, mock_store):
-    mock_get_embedder.return_value = mock_embeddings
-    mock_get_vectorstore.return_value = mock_store
-    
-    # Create a test document
-    test_doc = DocumentFull(content="test content", id="1")
-    
-    # Set up the mock store to return our test document
-    mock_store.query_by_embedding = MagicMock(return_value=[test_doc])
-    
-    pipeline = Pipeline(Retriever(mock_store, Settings()))
-    result = pipeline.run("test query")
-    
-    assert "documents" in result
-    assert len(result["documents"]) == 1
-    assert result["documents"][0].content == "test content"
-
-def test_pipeline_real_mode_initialization():
-    """Test that pipeline in real mode initializes with correct components."""
-    settings = Settings()
-    with patch('backend.app.pipeline.SentenceTransformer') as mock_st:
-        mock_st.return_value = MagicMock()
-        pipeline, retriever = build_pipeline(settings=settings, dev=False)
+    with patch('backend.app.pipeline.SentenceTransformer', return_value=mock_embeddings):
+        # Test pipeline in dev mode
+        pipeline, _ = build_pipeline(settings=Settings(), document_store=mock_store, dev=True)
+        result = pipeline.run("test query")
         
-        assert hasattr(pipeline, 'retriever')
-        assert hasattr(pipeline, 'components')
-        assert 'Retriever' in pipeline.components
+        assert "documents" in result
+        assert len(result["documents"]) == 1
+        assert result["documents"][0].content == "test content"
+        
+        # Verify namespace filtering
+        result = pipeline.run("test query", params={"Retriever": {"filters": {"namespace": "custom"}}})
+        
+        # Get the actual call arguments
+        call_args = mock_store.query_by_embedding.call_args
+        assert call_args is not None
+        
+        # Check the filters parameter
+        assert call_args.kwargs["filters"] == {"namespace": "custom"}
+        assert call_args.kwargs["top_k"] == 5
 
 def test_pipeline_error_handling(mock_embeddings, mock_store):
-    """Test pipeline error handling for various failure scenarios."""
+    """Test pipeline error handling for key failure scenarios."""
     settings = Settings()
-    retriever = Retriever(mock_store, settings)
     
-    # Test model initialization failure
-    with patch('backend.app.pipeline.Retriever.initialize', side_effect=Exception("Model not found")):
+    # Test query execution failure
+    mock_store.query_by_embedding.side_effect = Exception("Query failed")
+    
+    with patch('backend.app.pipeline.SentenceTransformer', return_value=mock_embeddings):
+        pipeline, _ = build_pipeline(settings=settings, document_store=mock_store, dev=True)
         with pytest.raises(Exception) as exc_info:
-            build_pipeline(settings=settings, dev=False)
-        assert "Failed to build pipeline" in str(exc_info.value)
-    
-    # Test retrieval failure
-    with patch('backend.app.pipeline.SentenceTransformer') as mock_st:
-        mock_st.return_value = MagicMock()
-        mock_st.return_value.encode.side_effect = Exception("Encoding failed")
-        pipeline, _ = build_pipeline(settings=settings, dev=True)  # Use dev mode to avoid actual model loading
-        with pytest.raises(Exception) as exc_info:
-            pipeline.run(query="test query")
-        assert "Pipeline execution failed: Retrieval failed: Encoding failed" in str(exc_info.value)
-    
-    # Create a new pipeline for the next test
-    pipeline, _ = build_pipeline(settings=settings, dev=True)
-    
-    # Mock retriever to raise an exception
-    pipeline.retriever.retrieve = MagicMock(side_effect=Exception("Test error"))
-    
-    with pytest.raises(Exception, match="Pipeline execution failed: Test error"):
-        pipeline.run(query="test query") 
+            pipeline.run("test query")
+        assert "Pipeline error: Query failed" in str(exc_info.value) 

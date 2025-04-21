@@ -33,6 +33,16 @@ export const FileManager: React.FC<FileManagerProps> = ({
   const selectedBg = useColorModeValue('blue.50', 'blue.900');
   const hoverBg = useColorModeValue('gray.50', 'gray.700');
 
+  const SUPPORTED_FILE_TYPES = ['.pdf', '.docx', '.txt'];
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+  };
+
   const fetchFiles = async () => {
     try {
       const fileList = await listFiles();
@@ -52,9 +62,31 @@ export const FileManager: React.FC<FileManagerProps> = ({
     fetchFiles();
   }, []);
 
+  const validateFiles = (files: FileList): boolean => {
+    for (const file of Array.from(files)) {
+      const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
+      if (!extension || !SUPPORTED_FILE_TYPES.includes(extension)) {
+        toast({
+          title: 'Invalid file type',
+          description: `File "${file.name}" is not supported. Please upload ${SUPPORTED_FILE_TYPES.join(', ')} files only.`,
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+        return false;
+      }
+    }
+    return true;
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
+
+    if (!validateFiles(files)) {
+      event.target.value = ''; // Reset the input
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -67,12 +99,14 @@ export const FileManager: React.FC<FileManagerProps> = ({
         duration: 3000,
         isClosable: true,
       });
+      event.target.value = ''; // Reset the input after successful upload
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload files';
       toast({
         title: 'Error',
-        description: 'Failed to upload files',
+        description: errorMessage,
         status: 'error',
-        duration: 3000,
+        duration: 5000,
         isClosable: true,
       });
     } finally {
@@ -111,21 +145,27 @@ export const FileManager: React.FC<FileManagerProps> = ({
       borderColor={boxBorderColor}
     >
       <VStack spacing={4} align="stretch">
-        <Button
-          as="label"
-          htmlFor="file-upload"
-          colorScheme="blue"
-          isLoading={isLoading}
-        >
-          Upload Files
-          <input
-            id="file-upload"
-            type="file"
-            multiple
-            onChange={handleFileUpload}
-            style={{ display: 'none' }}
-          />
-        </Button>
+        <VStack spacing={2} align="stretch">
+          <Button
+            as="label"
+            htmlFor="file-upload"
+            colorScheme="blue"
+            isLoading={isLoading}
+          >
+            Upload Files
+            <input
+              id="file-upload"
+              type="file"
+              multiple
+              accept={SUPPORTED_FILE_TYPES.join(',')}
+              onChange={handleFileUpload}
+              style={{ display: 'none' }}
+            />
+          </Button>
+          <Text fontSize="sm" color="gray.500">
+            Supported file types: {SUPPORTED_FILE_TYPES.join(', ')}
+          </Text>
+        </VStack>
 
         <List spacing={2}>
           {files.map((file) => (
@@ -139,7 +179,12 @@ export const FileManager: React.FC<FileManagerProps> = ({
               onClick={() => onFileSelect(file.id)}
             >
               <HStack justify="space-between">
-                <Text>{file.name}</Text>
+                <VStack align="start" spacing={0}>
+                  <Text>{file.filename}</Text>
+                  <Text fontSize="xs" color="gray.500">
+                    {formatFileSize(file.file_size)}
+                  </Text>
+                </VStack>
                 <IconButton
                   aria-label="Delete file"
                   icon={<DeleteIcon />}
@@ -147,7 +192,7 @@ export const FileManager: React.FC<FileManagerProps> = ({
                   variant="ghost"
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleDelete(file.name);
+                    handleDelete(file.filename);
                   }}
                 />
               </HStack>

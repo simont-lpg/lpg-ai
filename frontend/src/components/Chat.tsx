@@ -14,7 +14,8 @@ import { queryRAG, QueryResponse } from '../api';
 interface Message {
   type: 'user' | 'assistant';
   content: string;
-  sources?: QueryResponse['sources'];
+  documents?: QueryResponse['documents'];
+  error?: string;
 }
 
 interface ChatProps {
@@ -46,8 +47,9 @@ export const Chat: React.FC<ChatProps> = ({ selectedFileId }) => {
         ...prev,
         {
           type: 'assistant',
-          content: response.answer,
-          sources: response.sources,
+          content: response.answers[0] || 'No answer available',
+          documents: response.documents,
+          error: response.error
         },
       ]);
     } catch (error) {
@@ -80,12 +82,12 @@ export const Chat: React.FC<ChatProps> = ({ selectedFileId }) => {
                 {message.type === 'user' ? 'You' : 'Assistant'}:
               </Text>
               <Text>{message.content}</Text>
-              {message.sources && message.sources.length > 0 && (
+              {message.documents && message.documents.length > 0 && (
                 <Box mt={2}>
                   <Text fontSize="sm" fontWeight="bold">
                     Sources:
                   </Text>
-                  {message.sources.map((source, idx) => (
+                  {message.documents.map((doc, idx) => (
                     <Box 
                       key={idx} 
                       mt={1} 
@@ -93,10 +95,20 @@ export const Chat: React.FC<ChatProps> = ({ selectedFileId }) => {
                       bg={sourceBg}
                       borderRadius="md"
                     >
-                      <Text fontSize="sm">{source.content}</Text>
+                      <Text fontSize="sm">{doc.content}</Text>
+                      {doc.score && (
+                        <Text fontSize="xs" color="gray.500">
+                          Score: {doc.score.toFixed(3)}
+                        </Text>
+                      )}
                     </Box>
                   ))}
                 </Box>
+              )}
+              {message.error && (
+                <Text color="red.500" fontSize="sm" mt={2}>
+                  Error: {message.error}
+                </Text>
               )}
               <Divider mt={4} />
             </Box>

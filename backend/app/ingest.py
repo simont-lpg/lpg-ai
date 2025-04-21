@@ -6,6 +6,9 @@ from .schema import DocumentFull
 from sentence_transformers import SentenceTransformer
 import io
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SimpleConverter:
     """A simple converter that uses unstructured to convert files to text."""
@@ -59,6 +62,7 @@ async def ingest_documents(
                 
             # Read file content
             content = await file.read()
+            file_size = len(content)  # Get file size in bytes
             
             # Convert to document
             documents = converter.run(content)
@@ -67,7 +71,8 @@ async def ingest_documents(
             for doc in documents:
                 doc.meta = {
                     "namespace": namespace if namespace is not None else "default",
-                    "file_name": file.filename
+                    "file_name": file.filename,
+                    "file_size": file_size
                 }
             
             all_documents.extend(documents)
@@ -78,20 +83,48 @@ async def ingest_documents(
     
     if all_documents:
         try:
+            logger.info(f"Starting embedding generation for {len(all_documents)} documents")
+            
+            # Verify embedder is initialized
+            if embedder is None:
+                raise Exception("Embedder is not initialized")
+            
+            # Test embedder with a small sample
+            test_text = "test"
+            try:
+                if isinstance(embedder, SentenceTransformer):
+                    test_embedding = embedder.encode(test_text)
+                else:
+                    test_embedding = embedder.embed_batch([test_text])[0]
+                logger.info(f"Embedder test successful, embedding dimension: {len(test_embedding)}")
+            except Exception as e:
+                logger.error(f"Embedder test failed: {str(e)}", exc_info=True)
+                raise Exception(f"Embedder test failed: {str(e)}")
+            
             # Embed all documents at once
             if isinstance(embedder, SentenceTransformer):
+                logger.info("Using SentenceTransformer for embeddings")
                 embeddings = embedder.encode([doc.content for doc in all_documents], convert_to_numpy=True)
                 embeddings = embeddings.tolist()
             else:
+                logger.info("Using custom embedder for batch embeddings")
                 embeddings = embedder.embed_batch([doc.content for doc in all_documents])
+            
+            logger.info(f"Generated {len(embeddings)} embeddings")
             
             # Add embeddings to documents
             for doc, embedding in zip(all_documents, embeddings):
+                if embedding is None:
+                    raise Exception(f"Failed to generate embedding for document {doc.id}")
                 doc.embedding = embedding
+                logger.debug(f"Added embedding to document {doc.id}: {len(embedding) if embedding else 'None'}")
             
             # Write all documents at once
+            logger.info("Writing documents to store")
             document_store.write_documents(all_documents)
+            logger.info("Successfully wrote documents to store")
         except Exception as e:
+            logger.error(f"Failed to process documents: {str(e)}", exc_info=True)
             raise Exception(f"Failed to process documents: {str(e)}")
     
     return {

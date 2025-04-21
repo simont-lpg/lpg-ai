@@ -5,6 +5,7 @@ import requests
 from sentence_transformers import SentenceTransformer
 from .config import Settings
 from .schema import DocumentFull
+import logging
 
 class OllamaEmbeddings:
     """Embeddings using Ollama API."""
@@ -53,42 +54,34 @@ class InMemoryDocumentStore:
                 doc.id = str(len(self.documents))
             self.documents.append(doc)
             try:
-                if isinstance(self.model, OllamaEmbeddings):
-                    embeddings = self.model.embed_batch([doc.content])[0]
+                if doc.embedding is not None:
+                    embedding = np.array(doc.embedding)
                 else:
-                    embeddings = self.model.encode(doc.content)
-                # Ensure embedding has the correct dimension
-                embeddings = np.array(embeddings[:self.embedding_dim])
-                self.embeddings.append(embeddings)
+                    if isinstance(self.model, OllamaEmbeddings):
+                        embedding = self.model.embed_batch([doc.content])[0]
+                    else:
+                        embedding = self.model.encode(doc.content)
+                    embedding = np.array(embedding)
+                    doc.embedding = embedding.tolist()
+                
+                if len(embedding) > self.embedding_dim:
+                    embedding = embedding[:self.embedding_dim]
+                elif len(embedding) < self.embedding_dim:
+                    embedding = np.pad(embedding, (0, self.embedding_dim - len(embedding)))
+                
+                self.embeddings.append(embedding)
             except Exception as e:
-                raise Exception(f"Failed to generate embeddings for document: {str(e)}")
+                raise Exception(f"Failed to process embeddings for document: {str(e)}")
     
     def delete_documents(self, document_ids: Optional[List[str]] = None, filters: Optional[dict] = None) -> int:
-        """Delete documents from the store.
-        
-        Args:
-            document_ids: Optional list of document IDs to delete
-            filters: Optional dictionary of metadata filters
-            
-        Returns:
-            Number of documents deleted
-        """
-        if document_ids is None and filters is None:
-            # Clear all documents
-            count = len(self.documents)
-            self.documents = []
-            self.embeddings = []
-            return count
-        
+        """Delete documents from the store."""
         indices_to_delete = []
         
         if document_ids is not None:
-            # Delete by document IDs
             for i, doc in enumerate(self.documents):
                 if doc.id in document_ids:
                     indices_to_delete.append(i)
-        else:
-            # Delete by filters
+        elif filters is not None:
             for i, doc in enumerate(self.documents):
                 match = True
                 for key, value in filters.items():
@@ -98,7 +91,6 @@ class InMemoryDocumentStore:
                 if match:
                     indices_to_delete.append(i)
         
-        # Delete in reverse order to maintain indices
         for i in sorted(indices_to_delete, reverse=True):
             del self.documents[i]
             del self.embeddings[i]
@@ -121,29 +113,54 @@ class InMemoryDocumentStore:
                 filtered_docs.append(doc)
         return filtered_docs
     
-    def query_by_embedding(self, query_embedding: np.ndarray, top_k: int = 5) -> List[DocumentFull]:
+    def query_by_embedding(self, query_embedding: np.ndarray, top_k: int = 5, filters: Optional[dict] = None) -> List[DocumentFull]:
         """Query documents by embedding similarity."""
         if not self.documents:
             return []
         
-        # Ensure query embedding has the correct dimension
+        if isinstance(query_embedding, list):
+            query_embedding = np.array(query_embedding)
+        
         query_embedding = np.array(query_embedding[:self.embedding_dim])
         
-        # Calculate cosine similarity
+        # Filter documents by namespace if specified
+        filtered_docs = self.documents
+        filtered_embeddings = self.embeddings
+        
+        if filters and "namespace" in filters:
+            filtered_docs = []
+            filtered_embeddings = []
+            for doc, embedding in zip(self.documents, self.embeddings):
+                if doc.meta.get("namespace") == filters["namespace"]:
+                    filtered_docs.append(doc)
+                    filtered_embeddings.append(embedding)
+        
+        if not filtered_docs:
+            return []
+        
         similarities = []
-        for embedding in self.embeddings:
-            similarity = np.dot(query_embedding, embedding) / (
-                np.linalg.norm(query_embedding) * np.linalg.norm(embedding)
-            )
+        for i, embedding in enumerate(filtered_embeddings):
+            query_embedding = np.asarray(query_embedding)
+            doc_embedding = np.asarray(embedding)
+            
+            query_norm = np.linalg.norm(query_embedding)
+            doc_norm = np.linalg.norm(doc_embedding)
+            
+            if query_norm == 0 or doc_norm == 0:
+                similarity = 0
+            else:
+                similarity = np.dot(query_embedding, doc_embedding) / (query_norm * doc_norm)
+            
             similarities.append(similarity)
         
-        # Get top k documents
         top_indices = np.argsort(similarities)[-top_k:][::-1]
+        
         result_docs = []
         for i in top_indices:
-            doc = self.documents[i]
-            doc.score = float(similarities[i])  # Convert numpy float to Python float
+            doc = filtered_docs[i]
+            doc.score = float(similarities[i])
             result_docs.append(doc)
+        
         return result_docs
 
 def get_vectorstore(settings: Settings) -> InMemoryDocumentStore:

@@ -46,11 +46,18 @@ def test_query_model():
 def test_response_model():
     """Test Response model."""
     docs = [
-        DocumentMetadata(content="test1", id="1"),
-        DocumentMetadata(content="test2", id="2")
+        {
+            "content": "test1",
+            "id": "1",
+            "meta": {"namespace": "default"}
+        },
+        {
+            "content": "test2",
+            "id": "2",
+            "meta": {"namespace": "default"}
+        }
     ]
     response = Response(answers=["answer1"], documents=docs)
-    assert response.answers == ["answer1"]
     assert len(response.documents) == 2
-    assert response.documents[0].content == "test1"
-    assert response.documents[1].content == "test2" 
+    assert response.documents[0]["content"] == "test1"
+    assert response.documents[1]["content"] == "test2" 

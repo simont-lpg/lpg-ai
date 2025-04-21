@@ -6,6 +6,9 @@ from .schema import DocumentFull
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from functools import lru_cache
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Global document store instance
 _document_store = None
@@ -30,14 +33,18 @@ class Embedder:
 def get_embedder(settings: Settings = Depends(get_settings)):
     """Get embedder model based on settings."""
     try:
+        logger.info(f"Initializing embedder with model: {settings.embedding_model_name}")
         if settings.embedding_model_name == "mxbai-embed-large:latest":
+            logger.info("Using Ollama embeddings")
             return OllamaEmbeddings(
                 api_url=str(settings.ollama_api_url),
                 model_name=settings.embedding_model_name,
                 embedding_dim=settings.embedding_dim
             )
+        logger.info(f"Using SentenceTransformer with model: {settings.embedding_model}")
         return SentenceTransformer(settings.embedding_model)
     except Exception as e:
+        logger.error(f"Failed to initialize embedder: {str(e)}", exc_info=True)
         raise Exception(f"Failed to initialize embedder: {str(e)}")
 
 def get_document_store(settings: Settings = Depends(get_settings)) -> InMemoryDocumentStore:

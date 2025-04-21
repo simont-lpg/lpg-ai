@@ -2,6 +2,8 @@ import pytest
 from pydantic import ValidationError
 from backend.app.config import Settings
 import os
+import tempfile
+from pathlib import Path
 
 def test_valid_settings():
     """Test valid settings configuration."""
@@ -48,27 +50,32 @@ def test_default_settings():
 
 def test_settings_from_env():
     """Test settings from environment variables."""
-    os.environ["HAYSTACK_EMBEDDING_MODEL"] = "custom/model"
-    os.environ["HAYSTACK_EMBEDDING_DIM"] = "512"
-    os.environ["HAYSTACK_COLLECTION_NAME"] = "custom_collection"
-    os.environ["HAYSTACK_DEV_MODE"] = "true"
-    os.environ["HAYSTACK_OLLAMA_API_URL"] = "http://localhost:11434"
+    # Create a temporary .env file
+    env_content = """
+HAYSTACK_EMBEDDING_MODEL=custom/model
+HAYSTACK_EMBEDDING_DIM=512
+HAYSTACK_COLLECTION_NAME=custom_collection
+HAYSTACK_DEV_MODE=true
+HAYSTACK_OLLAMA_API_URL=http://localhost:11434
+    """.strip()
     
-    try:
-        settings = Settings()
-        assert settings.embedding_model == "custom/model"
-        assert settings.embedding_dim == 512
-        assert str(settings.ollama_api_url).rstrip("/") == "http://localhost:11434"
-        assert settings.collection_name == "custom_collection"
-        assert settings.dev_mode is True
-        assert str(settings.ollama_api_url) == "http://localhost:11434/"
-    finally:
-        # Clean up environment variables
-        del os.environ["HAYSTACK_EMBEDDING_MODEL"]
-        del os.environ["HAYSTACK_EMBEDDING_DIM"]
-        del os.environ["HAYSTACK_COLLECTION_NAME"]
-        del os.environ["HAYSTACK_DEV_MODE"]
-        del os.environ["HAYSTACK_OLLAMA_API_URL"]
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.env', delete=False) as temp_env:
+        temp_env.write(env_content)
+        temp_env.flush()
+        
+        try:
+            # Create settings with the temporary .env file
+            settings = Settings.from_env_file(temp_env.name)
+            
+            assert settings.embedding_model == "custom/model"
+            assert settings.embedding_dim == 512
+            assert str(settings.ollama_api_url).rstrip("/") == "http://localhost:11434"
+            assert settings.collection_name == "custom_collection"
+            assert settings.dev_mode is True
+            assert str(settings.ollama_api_url) == "http://localhost:11434/"
+        finally:
+            # Clean up the temporary file
+            os.unlink(temp_env.name)
 
 def test_config_validation():
     """Test configuration validation."""

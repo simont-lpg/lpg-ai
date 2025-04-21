@@ -1,9 +1,0 @@
-fastapi
-uvicorn
-pydantic
-pydantic-settings
-farm-haystack[all]
-chromadb
-chroma-haystack
-sentence-transformers
-python-dotenv 
