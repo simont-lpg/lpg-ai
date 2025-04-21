@@ -4,12 +4,11 @@ import {
   VStack,
   Input,
   Button,
-  Text,
   useToast,
-  Divider,
   useColorModeValue,
 } from '@chakra-ui/react';
 import { queryRAG, QueryResponse } from '../api';
+import { ChatHistory } from './ChatHistory';
 
 interface Message {
   type: 'user' | 'assistant';
@@ -27,11 +26,9 @@ export const Chat: React.FC<ChatProps> = ({ selectedFileId }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const toast = useToast();
-  
-  // Move color mode values to the top level
+
   const boxBg = useColorModeValue('white', 'gray.800');
   const boxBorderColor = useColorModeValue('gray.200', 'gray.700');
-  const sourceBg = useColorModeValue('gray.50', 'gray.700');
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -76,43 +73,7 @@ export const Chat: React.FC<ChatProps> = ({ selectedFileId }) => {
     >
       <VStack spacing={4} h="100%">
         <Box flex={1} w="100%" overflowY="auto">
-          {messages.map((message, index) => (
-            <Box key={index} mb={4}>
-              <Text fontWeight="bold">
-                {message.type === 'user' ? 'You' : 'Assistant'}:
-              </Text>
-              <Text>{message.content}</Text>
-              {message.documents && message.documents.length > 0 && (
-                <Box mt={2}>
-                  <Text fontSize="sm" fontWeight="bold">
-                    Sources:
-                  </Text>
-                  {message.documents.map((doc, idx) => (
-                    <Box 
-                      key={idx} 
-                      mt={1} 
-                      p={2} 
-                      bg={sourceBg}
-                      borderRadius="md"
-                    >
-                      <Text fontSize="sm">{doc.content}</Text>
-                      {doc.score && (
-                        <Text fontSize="xs" color="gray.500">
-                          Score: {doc.score.toFixed(3)}
-                        </Text>
-                      )}
-                    </Box>
-                  ))}
-                </Box>
-              )}
-              {message.error && (
-                <Text color="red.500" fontSize="sm" mt={2}>
-                  Error: {message.error}
-                </Text>
-              )}
-              <Divider mt={4} />
-            </Box>
-          ))}
+          <ChatHistory messages={messages} />
         </Box>
 
         <Box w="100%">
