@@ -1,80 +1,66 @@
-# Haystack RAG Service Frontend
+# RAG Frontend
 
-A React-based frontend for the Haystack RAG service, providing a modern and intuitive interface for document ingestion, management, and querying.
+A React-based frontend for a RAG (Retrieval-Augmented Generation) application.
 
 ## Features
 
-- Document ingestion with file upload
-- Document management and filtering
-- Natural language querying with source attribution
-- Modern, responsive design
-- Dark mode support
+- File management (upload, delete, select)
+- Chat interface for RAG queries
+- Source document display
+- Responsive two-column layout
 
 ## Prerequisites
 
-- Node.js 18+ and npm/yarn
-- Backend service running on port 8000
+- Node.js (v16 or higher)
+- npm (v7 or higher)
 
-## Setup
+## Installation
 
-1. Install dependencies:
-```bash
-npm install
-```
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-2. Start the development server:
+## Development
+
+To start the development server:
+
 ```bash
 npm run dev
 ```
 
-3. Build for production:
-```bash
-npm run build
-```
+The application will be available at `http://localhost:5173`.
 
 ## Testing
 
-Run the test suite:
+To run the test suite:
+
 ```bash
 npm test
 ```
 
-Run tests in watch mode:
-```bash
-npm run test:watch
-```
-
-Generate test coverage report:
-```bash
-npm run test:coverage
-```
-
 ## Project Structure
 
-```
-src/
-  ├── components/     # React components
-  ├── api/           # API client and types
-  ├── styles/        # Global styles and theme
-  ├── types/         # TypeScript type definitions
-  └── utils/         # Utility functions
-```
+- `src/components/` - React components
+  - `FileManager.tsx` - File management interface
+  - `Chat.tsx` - Chat interface for RAG queries
+- `src/api.ts` - API client for backend communication
+- `src/components/__tests__/` - Component tests
 
-## API Integration
+## API Endpoints
 
-The frontend communicates with the backend through the following endpoints:
+The frontend expects the following backend API endpoints:
 
-- `POST /api/ingest` - Upload and process documents
-- `GET /api/documents` - Retrieve document list
-- `POST /api/query` - Submit queries and get responses
+- `GET /files` - List uploaded files
+- `POST /upload` - Upload new files
+- `DELETE /documents` - Delete a document
+- `POST /query` - Query the RAG system
 
-## Contributing
+## Technologies Used
 
-1. Create a feature branch
-2. Make your changes
-3. Run tests
-4. Submit a pull request
-
-## License
-
-MIT 
+- React
+- TypeScript
+- Chakra UI
+- Jest
+- React Testing Library

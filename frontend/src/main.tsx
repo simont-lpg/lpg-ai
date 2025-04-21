@@ -1,29 +1,13 @@
-import * as React from 'react';
-import ReactDOM from 'react-dom/client';
-import { ThemeProvider } from 'styled-components';
-import App from './App';
-import { createGlobalStyle } from 'styled-components';
-import { theme } from './styles/theme';
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { ColorModeScript } from '@chakra-ui/react'
+import './index.css'
+import App from './App.tsx'
+import theme from './theme'
 
-const GlobalStyle = createGlobalStyle`
-  * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
-
-  body {
-    font-family: ${({ theme }) => theme.typography.fontFamily};
-    background-color: ${({ theme }) => theme.palette.background.default};
-    color: ${({ theme }) => theme.palette.text.primary};
-  }
-`;
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ThemeProvider theme={theme}>
-      <GlobalStyle />
-      <App />
-    </ThemeProvider>
-  </React.StrictMode>
-); 
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <ColorModeScript initialColorMode={theme.config.initialColorMode} />
+    <App />
+  </StrictMode>,
+)

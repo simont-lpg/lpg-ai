@@ -4,13 +4,20 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Haystack RAG Service</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <title>RAG App</title>
+    <!-- Color Mode Script -->
+    <script>
+      // On page load or when changing themes, best to add inline in `head` to avoid FOUC
+      if (localStorage.getItem('chakra-ui-color-mode') === null) {
+        localStorage.setItem('chakra-ui-color-mode', 'dark');
+      }
+      const colorMode = localStorage.getItem('chakra-ui-color-mode');
+      document.documentElement.style.setProperty('color-scheme', colorMode);
+      document.documentElement.classList.add(`chakra-ui-${colorMode}`);
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
-</html> 
+</html>

@@ -36,12 +36,14 @@ data/
 chroma/
 *.db
 *.sqlite3
+backend/tests/data/
 
 # Logs
 *.log
 
 # Coverage
 .coverage
+.coverage.*
 htmlcov/
 .pytest_cache/
 
