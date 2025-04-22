@@ -1,11 +1,13 @@
 export default {
   testEnvironment: 'jsdom',
-  setupFilesAfterEnv: ['<rootDir>/src/setupTests.ts'],
   moduleNameMapper: {
+    '\\.svg$': '<rootDir>/src/__mocks__/svgMock.js',
     '^@/(.*)$': '<rootDir>/src/$1',
   },
+  setupFilesAfterEnv: ['<rootDir>/src/setupTests.ts'],
   testMatch: ['**/__tests__/**/*.tsx', '**/?(*.)+(spec|test).tsx'],
   transform: {
     '^.+\\.(ts|tsx)$': 'ts-jest',
   },
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
 }; 

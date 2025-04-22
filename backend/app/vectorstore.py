@@ -7,6 +7,20 @@ from .config import Settings
 from .schema import DocumentFull
 import logging
 
+class DummyEmbeddings:
+    """Dummy embeddings for development."""
+    
+    def __init__(self, embedding_dim: int = 384):
+        self.embedding_dim = embedding_dim
+    
+    def encode(self, text: str) -> List[float]:
+        """Return dummy embeddings."""
+        return [0.1] * self.embedding_dim
+    
+    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+        """Return dummy embeddings for a batch of texts."""
+        return [[0.1] * self.embedding_dim for _ in texts]
+
 class OllamaEmbeddings:
     """Embeddings using Ollama API."""
     

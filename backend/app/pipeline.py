@@ -4,7 +4,8 @@ from sentence_transformers import SentenceTransformer
 from fastapi import Depends
 from .config import Settings, get_settings
 from .schema import DocumentFull
-from .vectorstore import InMemoryDocumentStore, OllamaEmbeddings, get_vectorstore
+from .vectorstore import InMemoryDocumentStore, OllamaEmbeddings, DummyEmbeddings, get_vectorstore
+from .generator import OllamaGenerator, DummyGenerator, BaseGenerator
 import logging
 
 def get_embedder(settings: Settings = Depends(get_settings)):
@@ -73,9 +74,10 @@ class Retriever:
 class Pipeline:
     """Pipeline for processing RAG queries."""
     
-    def __init__(self, retriever: Retriever):
+    def __init__(self, retriever: Retriever, generator: BaseGenerator):
         self.retriever = retriever
-        self.components = {"Retriever": retriever}
+        self.generator = generator
+        self.components = {"Retriever": retriever, "Generator": generator}
         self.logger = logging.getLogger(__name__)
     
     def run(self, query: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -94,16 +96,42 @@ class Pipeline:
             
             self.logger.info(f"Pipeline returned {len(documents)} documents")
             
-            return {
-                "documents": documents,
-                "answers": []  # TODO: Add answer generation
-            }
+            # Generate answer using the retrieved documents
+            if documents:
+                # Create a prompt with the retrieved documents
+                context = "\n\n".join([doc.content for doc in documents])
+                prompt = f"""Based on the following context, please answer the question. If the answer cannot be found in the context, say "I don't know."
+
+Context:
+{context}
+
+Question: {query}
+
+Answer:"""
+                
+                # Generate answer
+                answer = self.generator.generate(prompt)
+                self.logger.info(f"Generated answer: {answer}")
+                
+                return {
+                    "documents": documents,
+                    "answers": [answer]
+                }
+            else:
+                return {
+                    "documents": [],
+                    "answers": ["I don't know."]
+                }
         except Exception as e:
             error_msg = f"Pipeline error: {str(e)}"
             self.logger.error(error_msg)
             raise Exception(error_msg)
 
-def build_pipeline(settings: Settings, document_store: InMemoryDocumentStore, dev: bool = False) -> Tuple[Pipeline, Retriever]:
+def build_pipeline(
+    settings: Settings,
+    document_store: InMemoryDocumentStore,
+    dev: bool = False
+) -> Tuple[Pipeline, Retriever]:
     """Build a pipeline with the given settings and document store.
     
     Args:
@@ -118,27 +146,29 @@ def build_pipeline(settings: Settings, document_store: InMemoryDocumentStore, de
         RuntimeError: If pipeline initialization fails
     """
     try:
-        # Initialize embedder
+        # select embedding model
         if dev:
-            # Use stub embeddings in dev mode
-            model = type('MockModel', (), {
-                'encode': lambda _, text: [0.1] * settings.embedding_dim,
-                'embed_batch': lambda _, texts: [[0.1] * settings.embedding_dim for _ in texts]
-            })()
+            embedder = DummyEmbeddings(embedding_dim=settings.embedding_dim)
         elif settings.embedding_model_name == "mxbai-embed-large:latest":
-            model = OllamaEmbeddings(
+            embedder = OllamaEmbeddings(
                 api_url=str(settings.ollama_api_url),
                 model_name=settings.embedding_model_name,
                 embedding_dim=settings.embedding_dim
             )
         else:
-            model = SentenceTransformer(settings.embedding_model)
+            embedder = SentenceTransformer(settings.embedding_model)
+            
+        # select generator
+        generator = DummyGenerator() if dev else OllamaGenerator(
+            api_url=str(settings.ollama_api_url),
+            model_name=settings.generator_model_name
+        )
         
         # Create retriever
-        retriever = Retriever(document_store=document_store, model=model)
+        retriever = Retriever(document_store=document_store, model=embedder)
         
         # Create pipeline
-        pipeline = Pipeline(retriever=retriever)
+        pipeline = Pipeline(retriever=retriever, generator=generator)
         
         return pipeline, retriever
     except Exception as e:

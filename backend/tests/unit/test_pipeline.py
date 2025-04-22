@@ -1,5 +1,5 @@
 import pytest
-from backend.app.pipeline import build_pipeline, Pipeline
+from backend.app.pipeline import build_pipeline, Pipeline, Retriever
 from backend.app.config import Settings
 from backend.app.schema import DocumentFull
 from unittest.mock import patch, MagicMock
@@ -59,4 +59,46 @@ def test_pipeline_error_handling(mock_embeddings, mock_store):
         pipeline, _ = build_pipeline(settings=settings, document_store=mock_store, dev=True)
         with pytest.raises(Exception) as exc_info:
             pipeline.run("test query")
-        assert "Pipeline error: Query failed" in str(exc_info.value) 
+        assert "Pipeline error: Query failed" in str(exc_info.value)
+
+def test_build_pipeline_with_mistral_instruct():
+    """Test pipeline configuration with Mistral-instruct."""
+    # Create test settings
+    settings = Settings(
+        embedding_model="all-MiniLM-L6-v2",
+        embedding_model_name="all-MiniLM-L6-v2",
+        embedding_dim=384,
+        ollama_api_url="http://localhost:11434",
+        collection_name="test_documents",
+        generator_model_name="mistral-instruct:latest",
+        dev_mode=False
+    )
+    
+    # Create mock document store
+    document_store = InMemoryDocumentStore(
+        embedding_dim=settings.embedding_dim,
+        collection_name=settings.collection_name
+    )
+    
+    # Mock the OllamaGenerator
+    with patch('backend.app.pipeline.OllamaGenerator') as mock_generator:
+        # Configure mock
+        mock_generator_instance = MagicMock()
+        mock_generator.return_value = mock_generator_instance
+        
+        # Build pipeline
+        pipeline, retriever = build_pipeline(settings, document_store)
+        
+        # Verify pipeline components
+        assert isinstance(pipeline, Pipeline)
+        assert isinstance(retriever, Retriever)
+        
+        # Verify generator configuration
+        mock_generator.assert_called_once_with(
+            api_url=str(settings.ollama_api_url),
+            model_name=settings.generator_model_name
+        )
+        
+        # Verify retriever configuration
+        assert retriever.document_store == document_store
+        assert retriever.model is not None 

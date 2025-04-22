@@ -31,6 +31,7 @@ class Settings(BaseSettings):
         default=False,
         description="Whether to run in development mode"
     )
+    generator_model_name: str = "mistral:latest"
 
     # API Configuration
     api_host: str = Field(
@@ -107,7 +108,8 @@ class Settings(BaseSettings):
             self.log_level,
             self.database_url,
             self.secret_key,
-            self.rate_limit_per_minute
+            self.rate_limit_per_minute,
+            self.generator_model_name
         ))
 
     def __eq__(self, other):
@@ -128,7 +130,8 @@ class Settings(BaseSettings):
             self.log_level == other.log_level and
             self.database_url == other.database_url and
             self.secret_key == other.secret_key and
-            self.rate_limit_per_minute == other.rate_limit_per_minute
+            self.rate_limit_per_minute == other.rate_limit_per_minute and
+            self.generator_model_name == other.generator_model_name
         )
 
     model_config = SettingsConfigDict(

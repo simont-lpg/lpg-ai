@@ -73,7 +73,7 @@ async def query(
             logger.info(f"First document content: {result['documents'][0].content[:100]}...")
         
         return Response(
-            answers=[],  # TODO: Add answer generation
+            answers=result.get("answers", []),  # Get answers from pipeline result
             documents=[doc.to_dict() for doc in result["documents"]]
         )
     except Exception as e:

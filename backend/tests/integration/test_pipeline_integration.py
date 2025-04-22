@@ -31,12 +31,12 @@ def test_pipeline_integration():
         # Build pipeline
         pipeline, _ = build_pipeline(settings=settings, document_store=document_store, dev=True)
         
-        # Test basic query
-        result = pipeline.run("machine learning")
+        # Test basic query with default namespace
+        result = pipeline.run("machine learning", params={"Retriever": {"filters": {"namespace": "default"}}})
         assert len(result["documents"]) == 1
         assert "machine learning" in result["documents"][0].content.lower()
         
         # Test namespace filtering
-        result = pipeline.run("data", params={"namespace": "other"})
+        result = pipeline.run("data", params={"Retriever": {"filters": {"namespace": "other"}}})
         assert len(result["documents"]) == 1
         assert result["documents"][0].meta["namespace"] == "other" 
