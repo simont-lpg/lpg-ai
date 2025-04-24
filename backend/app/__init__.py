@@ -1,3 +1,1 @@
-"""
-Haystack RAG Service application package.
-""" 
+"""LPG AI Service application package.""" 

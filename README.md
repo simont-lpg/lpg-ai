@@ -1,60 +1,49 @@
-# Haystack RAG Service
+# LPG AI Service
 
-A RAG (Retrieval-Augmented Generation) service built with Haystack AI for efficient document processing and question answering.
+A modern AI service for document processing and retrieval.
 
-## Requirements
+## Installation
 
-- Python 3.11 or higher
-- pip (Python package installer)
-
-## Quick Start
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/haystack-rag-service.git
-   cd haystack-rag-service
-   ```
-
-2. Run the setup script:
-   ```bash
-   ./setup.sh
-   ```
-
-   This will:
-   - Create a virtual environment
-   - Install all dependencies
-   - Run initial tests
+```bash
+git clone https://github.com/yourusername/lpg-ai-service.git
+cd lpg-ai-service
+```
 
 ## Development
 
-The project includes several make commands to help with development:
-
-- `make install`: Install all dependencies
-- `make test`: Run all tests with coverage report
-- `make lint`: Run all linters (flake8, mypy, black, isort)
-- `make format`: Format code using black and isort
-- `make run`: Start the development server
-- `make clean`: Clean up temporary files and caches
-
-## Project Structure
-
+1. Create and activate a virtual environment:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
-haystack-rag-service/
-├── app/              # Main application code
-├── tests/            # Test files
-├── pyproject.toml    # Project configuration and dependencies
-├── setup.sh          # Setup script
-└── Makefile         # Development commands
+
+2. Install dependencies:
+```bash
+pip install -e ".[dev]"
+```
+
+3. Run the development server:
+```bash
+uvicorn backend.app.main:app --reload
+```
+
+## Testing
+
+Run tests with:
+```bash
+pytest
+```
+
+## Configuration
+
+Environment variables can be set in `.env.development` or `.env.production`:
+
+```bash
+LPG_AI_ENVIRONMENT=production
+LPG_AI_EMBEDDING_MODEL=sentence-transformers/multi-qa-MiniLM-L6-cos-v1
+LPG_AI_GENERATOR_MODEL_NAME=gpt-4
 ```
 
 ## License
 
-[Your chosen license]
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linting
-5. Submit a pull request 
+MIT 

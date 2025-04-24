@@ -52,11 +52,11 @@ def test_settings_from_env():
     """Test settings from environment variables."""
     # Create a temporary .env file
     env_content = """
-HAYSTACK_EMBEDDING_MODEL=custom/model
-HAYSTACK_EMBEDDING_DIM=512
-HAYSTACK_COLLECTION_NAME=custom_collection
-HAYSTACK_DEV_MODE=true
-HAYSTACK_OLLAMA_API_URL=http://localhost:11434
+LPG_AI_EMBEDDING_MODEL=custom/model
+LPG_AI_EMBEDDING_DIM=512
+LPG_AI_COLLECTION_NAME=custom_collection
+LPG_AI_DEV_MODE=true
+LPG_AI_OLLAMA_API_URL=http://localhost:11434
     """.strip()
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.env', delete=False) as temp_env:
@@ -89,4 +89,22 @@ def test_config_validation():
     
     # Test invalid model name
     with pytest.raises(ValidationError):
-        Settings(embedding_model=123) 
+        Settings(embedding_model=123)
+
+def test_environment_variables_override_defaults():
+    """Test that environment variables override default settings."""
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+        f.write("""
+LPG_AI_EMBEDDING_MODEL=custom/model
+LPG_AI_EMBEDDING_DIM=512
+LPG_AI_COLLECTION_NAME=custom_collection
+LPG_AI_DEV_MODE=true
+LPG_AI_OLLAMA_API_URL=http://localhost:11434
+""")
+        f.flush()
+        settings = Settings.from_env_file(f.name)
+        assert settings.embedding_model == "custom/model"
+        assert settings.embedding_dim == 512
+        assert settings.collection_name == "custom_collection"
+        assert settings.dev_mode is True
+        assert str(settings.ollama_api_url).rstrip('/') == "http://localhost:11434" 

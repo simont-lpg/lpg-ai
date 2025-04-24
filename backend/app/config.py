@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     
     # Database configuration
     database_url: str = Field(
-        default="sqlite:///./haystack.db",
+        default="sqlite:///./lpg_ai.db",
         description="Database connection URL"
     )
     
@@ -135,7 +135,7 @@ class Settings(BaseSettings):
         )
 
     model_config = SettingsConfigDict(
-        env_prefix="HAYSTACK_",
+        env_prefix="LPG_AI_",
         env_file=".env",  # Default to .env
         env_file_encoding="utf-8",
         extra="ignore",  # Changed from "allow" to "ignore" for security
@@ -155,8 +155,8 @@ class Settings(BaseSettings):
         for line in env_content.strip().split("\n"):
             if line and not line.startswith("#"):
                 key, value = line.strip().split("=", 1)
-                if key.startswith("HAYSTACK_"):
-                    env_vars[key[9:].lower()] = value
+                if key.startswith("LPG_AI_"):
+                    env_vars[key[7:].lower()] = value
         
         # Create settings with environment variables
         return cls(**env_vars)
@@ -165,7 +165,7 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Get application settings with caching."""
     env_file = (
-        ".env.production" if os.getenv("HAYSTACK_ENVIRONMENT") == "production"
+        ".env.production" if os.getenv("LPG_AI_ENVIRONMENT") == "production"
         else ".env.development"
     )
     return Settings.from_env_file(env_file) if os.path.exists(env_file) else Settings()
