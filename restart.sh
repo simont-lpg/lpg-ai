@@ -13,8 +13,10 @@ if [ $# -ne 1 ]; then
     print_usage
 fi
 
+# Get the base directory dynamically
+BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 MODE=$1
-BASE_DIR="/Users/simonlpg/Documents/lpg-ai"
 
 # Validate mode
 if [ "$MODE" != "dev" ] && [ "$MODE" != "prod" ]; then
@@ -40,10 +42,10 @@ cd "$BASE_DIR/backend" || { echo "Error: Could not change to backend directory";
 source .venv/bin/activate || { echo "Error: Could not activate virtual environment"; exit 1; }
 
 if [ "$MODE" = "dev" ]; then
-    nohup uvicorn backend.app.main:app --reload --host localhost --port 8000 > backend-dev.log 2>&1 &
+    nohup uvicorn backend.app.main:app --reload --host localhost --port 8000 > "$BASE_DIR/backend-dev.log" 2>&1 &
     BACKEND_PID=$!
 else
-    nohup uvicorn backend.app.main:app --host 0.0.0.0 --port 8003 > backend-prod.log 2>&1 &
+    nohup uvicorn backend.app.main:app --host 0.0.0.0 --port 8003 > "$BASE_DIR/backend-prod.log" 2>&1 &
     BACKEND_PID=$!
 fi
 
@@ -52,10 +54,10 @@ echo "Starting frontend server..."
 cd "$BASE_DIR/frontend" || { echo "Error: Could not change to frontend directory"; exit 1; }
 
 if [ "$MODE" = "dev" ]; then
-    nohup npm run dev > frontend-dev.log 2>&1 &
+    nohup npm run dev > "$BASE_DIR/frontend-dev.log" 2>&1 &
     FRONTEND_PID=$!
 else
-    nohup npx serve -s dist -l 5173 > frontend-prod.log 2>&1 &
+    nohup npx serve -s dist -l 5173 > "$BASE_DIR/frontend-prod.log" 2>&1 &
     FRONTEND_PID=$!
 fi
 
