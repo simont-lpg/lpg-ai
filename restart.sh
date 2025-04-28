@@ -24,6 +24,22 @@ if [ "$MODE" != "dev" ] && [ "$MODE" != "prod" ]; then
     print_usage
 fi
 
+# Handle environment files
+if [ "$MODE" = "prod" ]; then
+    echo "Setting up production environment..."
+    if [ -f "$BASE_DIR/backend/.env.production" ]; then
+        cp "$BASE_DIR/backend/.env.production" "$BASE_DIR/backend/.env"
+        echo "Copied .env.production to .env"
+    else
+        echo "Warning: .env.production not found. Using existing .env file."
+    fi
+else
+    echo "Using development environment..."
+    if [ ! -f "$BASE_DIR/backend/.env" ]; then
+        echo "Warning: .env file not found. Please create it from .env.example"
+    fi
+fi
+
 # Kill existing processes based on mode
 echo "Killing existing processes..."
 if [ "$MODE" = "dev" ]; then
