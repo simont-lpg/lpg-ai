@@ -34,12 +34,13 @@ else
     pkill -f "serve -s dist" || true
 fi
 
+# Activate virtual environment from project root
+echo "Activating virtual environment..."
+source "$BASE_DIR/.venv/bin/activate" || { echo "Error: Could not activate virtual environment"; exit 1; }
+
 # Start backend
 echo "Starting backend server..."
 cd "$BASE_DIR/backend" || { echo "Error: Could not change to backend directory"; exit 1; }
-
-# Activate virtual environment
-source .venv/bin/activate || { echo "Error: Could not activate virtual environment"; exit 1; }
 
 if [ "$MODE" = "dev" ]; then
     nohup uvicorn backend.app.main:app --reload --host localhost --port 8000 > "$BASE_DIR/backend-dev.log" 2>&1 &
