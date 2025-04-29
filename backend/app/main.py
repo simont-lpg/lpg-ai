@@ -34,6 +34,14 @@ async def root():
 async def health_check():
     return {"status": "healthy"}
 
+@app.get("/settings")
+async def read_settings(settings: Settings = Depends(get_settings)):
+    return {
+        "environment": settings.environment,
+        "embedding_model": settings.embedding_model_name,
+        "generator_model": settings.generator_model_name
+    }
+
 @app.post("/query", response_model=Response)
 async def query(
     query: Query,
