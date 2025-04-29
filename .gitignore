@@ -66,8 +66,8 @@ docker-compose.override.yml
 .env
 .venv
 frontend/.env
-backend/.env
-backend/.env.production
+!backend/.env.production
+!backend/.env
 !backend/.env.example
 
 # IDE
