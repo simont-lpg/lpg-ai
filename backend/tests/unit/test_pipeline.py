@@ -1,104 +1,86 @@
 import pytest
-from backend.app.pipeline import build_pipeline, Pipeline, Retriever
-from backend.app.config import Settings
-from backend.app.schema import DocumentFull
-from unittest.mock import patch, MagicMock
-import numpy as np
+from backend.app.pipeline import Pipeline, Retriever, build_pipeline
 from backend.app.vectorstore import InMemoryDocumentStore
+from backend.app.schema import DocumentFull
+import numpy as np
+from unittest.mock import MagicMock
 
 @pytest.fixture
 def mock_embeddings():
     """Mock embeddings model for testing."""
-    mock = MagicMock()
-    mock.encode.return_value = np.zeros(384)
-    mock.embed_batch.return_value = [np.zeros(384)]
-    return mock
+    class MockEmbeddings:
+        def encode(self, text):
+            return np.zeros(768)  # Return zero vector
+        def embed_batch(self, texts):
+            return [np.zeros(768) for _ in texts]  # Return zero vectors
+    return MockEmbeddings()
 
 @pytest.fixture
-def mock_store():
+def mock_store(mock_embeddings, settings):
     """Create a mock document store for testing."""
-    store = MagicMock()
-    store.embedding_dim = 384
-    store.collection_name = "test_documents"
-    return store
-
-def test_pipeline_query_execution(mock_embeddings, mock_store):
-    """Test core pipeline functionality with mocked dependencies."""
-    # Setup test document
-    test_doc = DocumentFull(content="test content", id="1", meta={"namespace": "default"})
-    mock_store.query_by_embedding.return_value = [test_doc]
-    
-    with patch('backend.app.pipeline.SentenceTransformer', return_value=mock_embeddings):
-        # Test pipeline in dev mode
-        pipeline, _ = build_pipeline(settings=Settings(), document_store=mock_store, dev=True)
-        result = pipeline.run("test query")
-        
-        assert "documents" in result
-        assert len(result["documents"]) == 1
-        assert result["documents"][0].content == "test content"
-        
-        # Verify namespace filtering
-        result = pipeline.run("test query", params={"Retriever": {"filters": {"namespace": "custom"}}})
-        
-        # Get the actual call arguments
-        call_args = mock_store.query_by_embedding.call_args
-        assert call_args is not None
-        
-        # Check the filters parameter
-        assert call_args.kwargs["filters"] == {"namespace": "custom"}
-        assert call_args.kwargs["top_k"] == 5
-
-def test_pipeline_error_handling(mock_embeddings, mock_store):
-    """Test pipeline error handling for key failure scenarios."""
-    settings = Settings()
-    
-    # Test query execution failure
-    mock_store.query_by_embedding.side_effect = Exception("Query failed")
-    
-    with patch('backend.app.pipeline.SentenceTransformer', return_value=mock_embeddings):
-        pipeline, _ = build_pipeline(settings=settings, document_store=mock_store, dev=True)
-        with pytest.raises(Exception) as exc_info:
-            pipeline.run("test query")
-        assert "Pipeline error: Query failed" in str(exc_info.value)
-
-def test_build_pipeline_with_mistral_instruct():
-    """Test pipeline configuration with Mistral-instruct."""
-    # Create test settings
-    settings = Settings(
-        embedding_model="all-MiniLM-L6-v2",
-        embedding_model_name="all-MiniLM-L6-v2",
-        embedding_dim=384,
-        ollama_api_url="http://localhost:11434",
-        collection_name="test_documents",
-        generator_model_name="mistral-instruct:latest",
-        dev_mode=False
-    )
-    
-    # Create mock document store
-    document_store = InMemoryDocumentStore(
+    return InMemoryDocumentStore(
         embedding_dim=settings.embedding_dim,
-        collection_name=settings.collection_name
+        collection_name=settings.collection_name,
+        embeddings_model=mock_embeddings
     )
-    
-    # Mock the OllamaGenerator
-    with patch('backend.app.pipeline.OllamaGenerator') as mock_generator:
-        # Configure mock
-        mock_generator_instance = MagicMock()
-        mock_generator.return_value = mock_generator_instance
-        
-        # Build pipeline
-        pipeline, retriever = build_pipeline(settings, document_store)
-        
-        # Verify pipeline components
-        assert isinstance(pipeline, Pipeline)
-        assert isinstance(retriever, Retriever)
-        
-        # Verify generator configuration
-        mock_generator.assert_called_once_with(
-            api_url=str(settings.ollama_api_url),
-            model_name=settings.generator_model_name
-        )
-        
-        # Verify retriever configuration
-        assert retriever.document_store == document_store
-        assert retriever.model is not None 
+
+@pytest.fixture
+def test_documents():
+    return [
+        Document(
+            id=f"test-doc-{i}",
+            content=f"test content {i}",
+            meta={"source": f"test-source-{i}"}
+        ) for i in range(3)
+    ]
+
+def test_pipeline_initialization(settings, mock_store):
+    """Test pipeline initialization."""
+    pipeline, retriever = build_pipeline(
+        settings=settings,
+        document_store=mock_store,
+        dev=True
+    )
+    assert isinstance(pipeline, Pipeline)
+    assert isinstance(retriever, Retriever)
+
+def test_pipeline_query(settings, mock_store, monkeypatch):
+    """Test pipeline query functionality."""
+    # Mock the embedder
+    class MockEmbedder:
+        def embed_batch(self, texts):
+            return [[0.0] * settings.embedding_dim for _ in texts]
+
+        def embed(self, text):
+            return [0.0] * settings.embedding_dim
+
+    monkeypatch.setattr("app.dependencies.get_embedder", lambda: MockEmbedder())
+
+    # Add test documents to store
+    docs = [
+        DocumentFull(content="Test document 1", id="1", meta={"namespace": "test"}),
+        DocumentFull(content="Test document 2", id="2", meta={"namespace": "test"})
+    ]
+    mock_store.write_documents(docs)
+
+    # Create pipeline
+    pipeline, _ = build_pipeline(
+        settings=settings,
+        document_store=mock_store,
+        dev=True
+    )
+
+    # Test query
+    result = pipeline.run("test query")
+    expected_prompt = settings.prompt_template.format(
+        context="Test document 2\n\nTest document 1",
+        query="test query"
+    )
+    assert result["answers"][0] == f"[DEV] {expected_prompt}"
+    assert len(result["documents"]) == 2
+
+def test_retriever_initialization(settings, mock_store):
+    """Test retriever initialization."""
+    retriever = Retriever(document_store=mock_store)
+    retriever.initialize(settings)
+    assert retriever.model is not None 

@@ -7,13 +7,14 @@ from sentence_transformers import SentenceTransformer
 import io
 import uuid
 import logging
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
 class SimpleConverter:
     """A simple converter that uses unstructured to convert files to text."""
     
-    def run(self, content: bytes) -> List[DocumentFull]:
+    def run(self, content: bytes, doc_id: Optional[str] = None) -> List[DocumentFull]:
         """Convert file content to documents."""
         if not content:
             raise Exception("Empty file content provided")
@@ -23,7 +24,12 @@ class SimpleConverter:
             file_obj = io.BytesIO(content)
             # Use text partitioner directly for text content
             elements = partition_text(file=file_obj)
-            return [DocumentFull(id=str(uuid.uuid4()), content=str(element)) for element in elements]
+            # Use provided ID or generate a new one
+            return [DocumentFull(
+                id=doc_id or str(uuid.uuid4()), 
+                content=str(element),
+                meta={}  # Initialize with empty meta dict
+            ) for element in elements]
         except Exception as e:
             raise Exception(f"Failed to convert file content: {str(e)}")
 
@@ -31,7 +37,8 @@ async def ingest_documents(
     files: List[UploadFile],
     namespace: Optional[str] = None,
     document_store = None,
-    embedder = None
+    embedder = None,
+    doc_id: Optional[str] = None
 ) -> dict:
     """Ingest documents into the vector store.
     
@@ -40,6 +47,7 @@ async def ingest_documents(
         namespace: Optional namespace for the documents
         document_store: Document store instance
         embedder: Embedder instance
+        doc_id: Optional document ID to use
         
     Returns:
         dict with ingestion status and counts
@@ -65,7 +73,7 @@ async def ingest_documents(
             file_size = len(content)  # Get file size in bytes
             
             # Convert to document
-            documents = converter.run(content)
+            documents = converter.run(content, doc_id=doc_id)
             
             # Add namespace and filename to documents
             for doc in documents:
@@ -116,8 +124,8 @@ async def ingest_documents(
             for doc, embedding in zip(all_documents, embeddings):
                 if embedding is None:
                     raise Exception(f"Failed to generate embedding for document {doc.id}")
-                doc.embedding = embedding
-                logger.debug(f"Added embedding to document {doc.id}: {len(embedding) if embedding else 'None'}")
+                doc.embedding = np.array(embedding) if not isinstance(embedding, np.ndarray) else embedding
+                logger.debug(f"Added embedding to document {doc.id}: {len(embedding) if embedding is not None else 'None'}")
             
             # Write all documents at once
             logger.info("Writing documents to store")
@@ -131,5 +139,6 @@ async def ingest_documents(
         "status": "success",
         "namespace": namespace,
         "files_ingested": files_ingested,
-        "total_chunks": total_chunks
+        "total_chunks": total_chunks,
+        "documents": [doc.to_dict() for doc in all_documents]
     } 

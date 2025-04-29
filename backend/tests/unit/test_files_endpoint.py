@@ -52,7 +52,7 @@ def client(monkeypatch):
     # Create a mock embedder
     class MockEmbedder:
         def encode(self, texts, convert_to_numpy=True):
-            return [[0.1] * 384] * len(texts)
+            return [[0.1] * 768] * len(texts)
     
     # Patch both dependencies
     monkeypatch.setattr(app.dependencies, "_document_store", MockStore())

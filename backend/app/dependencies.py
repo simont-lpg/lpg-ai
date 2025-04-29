@@ -33,12 +33,12 @@ class Embedder:
 def get_embedder(settings: Settings = Depends(get_settings)):
     """Get embedder model based on settings."""
     try:
-        logger.info(f"Initializing embedder with model: {settings.embedding_model_name}")
-        if settings.embedding_model_name == "mxbai-embed-large:latest":
+        logger.info(f"Initializing embedder with model: {settings.embedding_model}")
+        if settings.ollama_api_url:
             logger.info("Using Ollama embeddings")
             return OllamaEmbeddings(
                 api_url=str(settings.ollama_api_url),
-                model_name=settings.embedding_model_name,
+                model_name=settings.embedding_model,
                 embedding_dim=settings.embedding_dim
             )
         logger.info(f"Using SentenceTransformer with model: {settings.embedding_model}")
@@ -53,15 +53,7 @@ def get_document_store(settings: Settings = Depends(get_settings)) -> InMemoryDo
     
     if _document_store is None:
         try:
-            if settings.embedding_model_name == "mxbai-embed-large:latest":
-                model = OllamaEmbeddings(
-                    api_url=str(settings.ollama_api_url),
-                    model_name=settings.embedding_model_name,
-                    embedding_dim=settings.embedding_dim
-                )
-            else:
-                model = SentenceTransformer(settings.embedding_model)
-            
+            model = get_embedder(settings)
             _document_store = InMemoryDocumentStore(
                 embedding_dim=settings.embedding_dim,
                 collection_name=settings.collection_name,

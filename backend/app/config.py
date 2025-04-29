@@ -1,83 +1,73 @@
-from pydantic import BaseModel, Field, field_validator, HttpUrl
+from pydantic import Field, AnyUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
-from typing import List, Optional, Dict, Any
-import os
+from typing import List, Dict, Any
+import logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
     """Settings for the application."""
-    embedding_model: str = Field(
-        default="all-MiniLM-L6-v2",
-        description="Name of the embedding model to use"
-    )
-    embedding_model_name: str = Field(
-        default="all-MiniLM-L6-v2",
-        description="Display name of the embedding model"
-    )
-    embedding_dim: int = Field(
-        default=384,
-        gt=0,
-        description="Embedding dimension must be positive"
-    )
-    ollama_api_url: HttpUrl = Field(
-        default="http://127.0.0.1:11434",
-        description="URL of the Ollama API"
-    )
-    collection_name: str = Field(
-        default="documents",
-        description="Name of the document collection"
-    )
-    dev_mode: bool = Field(
-        default=False,
-        description="Whether to run in development mode"
-    )
-    generator_model_name: str = "mistral:latest"
+    # Model Settings
+    embedding_model: str = Field(..., description="Name of the embedding model")
+    generator_model_name: str = Field(..., description="Name of the generator model")
+    embedding_dim: int = Field(..., description="Dimension of the embeddings")
+    ollama_api_url: AnyUrl = Field(..., description="URL of the Ollama API")
+    
+    # Document Store Settings
+    collection_name: str = Field(..., description="Name of the document collection")
+    
+    # API Settings
+    api_host: str = Field(..., description="Host to bind the API server to")
+    api_port: int = Field(..., description="Port to bind the API server to")
+    cors_origins: List[str] = Field(..., description="Comma-separated list of allowed CORS origins")
+    
+    # Environment Settings
+    dev_mode: bool = Field(..., description="Whether to run in development mode")
+    environment: str = Field(..., description="Current environment (development, production)")
+    log_level: str = Field(..., description="Logging level")
+    
+    # Database Settings
+    database_url: str = Field(..., description="Database connection URL")
+    
+    # Security Settings
+    secret_key: str = Field(..., description="Secret key for JWT tokens")
+    rate_limit_per_minute: int = Field(..., description="Maximum requests per minute")
+    
+    # Pipeline Settings
+    default_top_k: int = Field(default=5, description="Default number of documents to retrieve")
+    prompt_template: str = Field(
+        default="""Based on the following context, please answer the question. If the answer cannot be found in the context, say "I don't know."
 
-    # API Configuration
-    api_host: str = Field(
-        default="0.0.0.0",
-        description="Host to bind the API server to"
+Context:
+{context}
+
+Question: {query}
+
+Answer:""",
+        description="Template for the prompt used in the pipeline"
     )
-    api_port: int = Field(
-        default=8000,
-        description="Port to bind the API server to"
-    )
-    
-    # CORS Configuration
-    cors_origins: List[str] = Field(
-        default=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175"],
-        description="Comma-separated list of allowed CORS origins"
+    pipeline_parameters: Dict[str, Any] = Field(
+        default_factory=lambda: {
+            "Retriever": {
+                "top_k": 5,
+                "score_threshold": 0.7
+            },
+            "Generator": {
+                "temperature": 0.7,
+                "max_tokens": 1000
+            }
+        },
+        description="Default parameters for pipeline components"
     )
 
-    # Environment-specific settings
-    environment: str = Field(
-        default="development",
-        description="Current environment (development, production)"
-    )
-    
-    # Logging configuration
-    log_level: str = Field(
-        default="INFO",
-        description="Logging level"
-    )
-    
-    # Database configuration
-    database_url: str = Field(
-        default="sqlite:///./lpg_ai.db",
-        description="Database connection URL"
-    )
-    
-    # Security settings
-    secret_key: str = Field(
-        default="your-secret-key-here",
-        description="Secret key for JWT tokens"
-    )
-    
-    # Rate limiting
-    rate_limit_per_minute: int = Field(
-        default=60,
-        description="Maximum requests per minute"
-    )
+    @field_validator("embedding_dim")
+    def validate_embedding_dim(cls, v: int) -> int:
+        """Validate that embedding dimension is positive."""
+        if v <= 0:
+            raise ValueError("embedding_dim must be greater than 0")
+        return v
 
     @field_validator("cors_origins", mode="before")
     def parse_cors_origins(cls, v):
@@ -86,7 +76,7 @@ class Settings(BaseSettings):
         return v
 
     @field_validator("ollama_api_url")
-    def validate_ollama_url(cls, v: HttpUrl) -> HttpUrl:
+    def validate_ollama_url(cls, v: AnyUrl) -> AnyUrl:
         """Validate that the Ollama API URL uses http or https scheme."""
         if str(v).startswith(("http://", "https://")):
             return v
@@ -94,9 +84,14 @@ class Settings(BaseSettings):
 
     def __hash__(self):
         """Make Settings hashable based on its field values."""
+        # Convert dictionaries to tuples of sorted items
+        pipeline_params = tuple(
+            (k, tuple(sorted(v.items()))) 
+            for k, v in sorted(self.pipeline_parameters.items())
+        )
+        
         return hash((
             self.embedding_model,
-            self.embedding_model_name,
             self.embedding_dim,
             str(self.ollama_api_url),
             self.collection_name,
@@ -109,7 +104,10 @@ class Settings(BaseSettings):
             self.database_url,
             self.secret_key,
             self.rate_limit_per_minute,
-            self.generator_model_name
+            self.generator_model_name,
+            self.default_top_k,
+            self.prompt_template,
+            pipeline_params
         ))
 
     def __eq__(self, other):
@@ -118,7 +116,6 @@ class Settings(BaseSettings):
             return False
         return (
             self.embedding_model == other.embedding_model and
-            self.embedding_model_name == other.embedding_model_name and
             self.embedding_dim == other.embedding_dim and
             str(self.ollama_api_url) == str(other.ollama_api_url) and
             self.collection_name == other.collection_name and
@@ -131,44 +128,27 @@ class Settings(BaseSettings):
             self.database_url == other.database_url and
             self.secret_key == other.secret_key and
             self.rate_limit_per_minute == other.rate_limit_per_minute and
-            self.generator_model_name == other.generator_model_name
+            self.generator_model_name == other.generator_model_name and
+            self.default_top_k == other.default_top_k and
+            self.prompt_template == other.prompt_template and
+            self.pipeline_parameters == other.pipeline_parameters
         )
 
     model_config = SettingsConfigDict(
+        env_file=str(Path(__file__).parent.parent / ".env"),
         env_prefix="LPG_AI_",
-        env_file=".env",  # Default to .env
         env_file_encoding="utf-8",
-        extra="ignore",  # Changed from "allow" to "ignore" for security
-        case_sensitive=True,
-        validate_default=True,
     )
-
-    @classmethod
-    def from_env_file(cls, env_file: str) -> "Settings":
-        """Create settings from an environment file."""
-        # Read environment file
-        with open(env_file) as f:
-            env_content = f.read()
-        
-        # Parse environment variables
-        env_vars = {}
-        for line in env_content.strip().split("\n"):
-            if line and not line.startswith("#"):
-                key, value = line.strip().split("=", 1)
-                if key.startswith("LPG_AI_"):
-                    env_vars[key[7:].lower()] = value
-        
-        # Create settings with environment variables
-        return cls(**env_vars)
 
 @lru_cache()
 def get_settings() -> Settings:
     """Get application settings with caching."""
-    env_file = (
-        ".env.production" if os.getenv("LPG_AI_ENVIRONMENT") == "production"
-        else ".env.development"
-    )
-    return Settings.from_env_file(env_file) if os.path.exists(env_file) else Settings()
+    settings = Settings()
+    logger.info("Settings loaded with values:")
+    for key, value in settings.model_dump().items():
+        if key not in ["secret_key"]:  # Don't log sensitive information
+            logger.info(f"  {key}: {value}")
+    return settings
 
 # Initialize settings
 settings = get_settings() 

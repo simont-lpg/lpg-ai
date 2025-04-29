@@ -1,34 +1,34 @@
 import pytest
 from fastapi.testclient import TestClient
-from app.main import app
-from app.schema import DocumentFull
-from app.config import Settings
-from app.vectorstore import InMemoryDocumentStore
-from app.dependencies import get_document_store
-from unittest.mock import patch
+from backend.app.main import app
+from backend.app.schema import DocumentFull
+from backend.app.config import Settings
+from backend.app.vectorstore import InMemoryDocumentStore
+from backend.app.dependencies import get_document_store
+from unittest.mock import patch, MagicMock
 import json
+import numpy as np
 
 @pytest.fixture
 def client():
     return TestClient(app)
 
 @pytest.fixture
-def mock_store():
-    # Create a real store instance
+def mock_store(settings):
+    """Create a mock store instance."""
+    mock_model = MagicMock()
+    mock_model.embedding_dim = settings.embedding_dim
+    # Return zero vectors for any number of documents
+    mock_model.embed_batch.side_effect = lambda texts: np.zeros((len(texts), settings.embedding_dim))
     store = InMemoryDocumentStore(
-        embedding_dim=384,
-        collection_name="test_documents"
+        embedding_dim=settings.embedding_dim,
+        collection_name=settings.collection_name,
+        embeddings_model=mock_model
     )
-    
-    # Mock the embeddings model
-    store.model = type('MockModel', (), {
-        'encode': lambda _, text: [0.1] * 384,
-        'embed_batch': lambda _, texts: [[0.1] * 384 for _ in texts]
-    })()
-    
     return store
 
 def test_integration_smoke(client, mock_store):
+    """Basic smoke test for document store integration."""
     # Override the dependency
     app.dependency_overrides[get_document_store] = lambda: mock_store
     
@@ -45,13 +45,16 @@ def test_integration_smoke(client, mock_store):
         # Test the endpoint
         resp = client.get("/documents")
         assert resp.status_code == 200
-        ids = {d["id"] for d in resp.json()}
-        assert ids == {"a","b"}
+        data = resp.json()
+        assert len(data) == 2
+        ids = {d["id"] for d in data}
+        assert ids == {"a", "b"}
     finally:
         # Clean up
-        app.dependency_overrides.clear() 
+        app.dependency_overrides.clear()
 
 def test_delete_documents_integration(client, mock_store):
+    """Test document deletion integration."""
     # Override the dependency
     app.dependency_overrides[get_document_store] = lambda: mock_store
     
@@ -67,11 +70,11 @@ def test_delete_documents_integration(client, mock_store):
         mock_store.write_documents(docs)
         
         # Test deletion
-        resp = client.request("DELETE", "/documents", data=json.dumps({"file_name": "test.txt"}), headers={"Content-Type": "application/json"})
+        resp = client.post("/documents/delete", json={"file_name": "test.txt"})
         assert resp.status_code == 200
         data = resp.json()
+        assert data["deleted"] == 2  # Two documents should be deleted
         assert data["status"] == "success"
-        assert data["deleted"] == 2  # Should delete 2 documents
         
         # Verify documents are deleted
         resp = client.get("/documents")
@@ -81,10 +84,11 @@ def test_delete_documents_integration(client, mock_store):
         assert remaining_docs[0]["id"] == "c"
         
         # Test deleting non-existent file
-        resp = client.request("DELETE", "/documents", data=json.dumps({"file_name": "nonexistent.txt"}), headers={"Content-Type": "application/json"})
+        resp = client.post("/documents/delete", json={"file_name": "nonexistent.txt"})
         assert resp.status_code == 200
         data = resp.json()
-        assert data["deleted"] == 0
+        assert data["deleted"] == 0  # No documents should be deleted
+        assert data["status"] == "success"
     finally:
         # Clean up
         app.dependency_overrides.clear() 

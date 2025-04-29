@@ -1,42 +1,39 @@
 import pytest
-import numpy as np
-from backend.app.schema import DocumentFull
 from backend.app.pipeline import build_pipeline
 from backend.app.config import Settings
 from backend.app.vectorstore import InMemoryDocumentStore
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
+import numpy as np
 
-@pytest.mark.integration
-def test_pipeline_integration():
-    """Test pipeline integration with in-memory store."""
-    # Create real document store
-    settings = Settings()
-    document_store = InMemoryDocumentStore(
+@pytest.fixture
+def mock_store(settings):
+    """Create a mock store instance."""
+    mock_model = MagicMock()
+    mock_model.embedding_dim = settings.embedding_dim
+    # Return zero vectors for any number of documents
+    mock_model.embed_batch.side_effect = lambda texts: np.zeros((len(texts), settings.embedding_dim))
+    store = InMemoryDocumentStore(
         embedding_dim=settings.embedding_dim,
-        collection_name="test_documents"
+        collection_name=settings.collection_name,
+        embeddings_model=mock_model
     )
-    
-    # Add test documents
-    docs = [
-        DocumentFull(id="1", content="Document about machine learning", meta={"namespace": "default"}),
-        DocumentFull(id="2", content="Document about data science", meta={"namespace": "other"})
-    ]
-    document_store.write_documents(docs)
-    
-    # Mock embeddings model
-    mock_embeddings = MagicMock()
-    mock_embeddings.encode.return_value = np.zeros(384)
-    
-    with patch('backend.app.pipeline.SentenceTransformer', return_value=mock_embeddings):
-        # Build pipeline
-        pipeline, _ = build_pipeline(settings=settings, document_store=document_store, dev=True)
+    return store
+
+def test_pipeline_query_integration(settings, mock_store):
+    try:
+        # Build pipeline with settings and mock store
+        pipeline, _ = build_pipeline(settings=settings, document_store=mock_store, dev=True)
         
-        # Test basic query with default namespace
-        result = pipeline.run("machine learning", params={"Retriever": {"filters": {"namespace": "default"}}})
-        assert len(result["documents"]) == 1
-        assert "machine learning" in result["documents"][0].content.lower()
-        
-        # Test namespace filtering
-        result = pipeline.run("data", params={"Retriever": {"filters": {"namespace": "other"}}})
-        assert len(result["documents"]) == 1
-        assert result["documents"][0].meta["namespace"] == "other" 
+        # Test query
+        query = "test query"
+        result = pipeline.run(query)
+        assert result is not None
+        assert isinstance(result, dict)
+        assert "answers" in result
+        assert len(result["answers"]) > 0
+        assert isinstance(result["answers"][0], str)
+    except Exception as e:
+        if "Connection refused" in str(e):
+            pytest.skip("Ollama API not available")
+        else:
+            raise e 

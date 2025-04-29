@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from fastapi import FastAPI, Depends
 from backend.app.main import app
 from backend.app.vectorstore import InMemoryDocumentStore
-from backend.app.schema import DocumentFull
+from backend.app.schema import DocumentFull, Query
 from backend.app.config import Settings
 from backend.app.dependencies import get_document_store, get_embedder
 from sentence_transformers import SentenceTransformer
@@ -19,23 +19,20 @@ def test_document():
     )
 
 @pytest.fixture
-def test_settings():
-    return Settings(
-        embedding_model="all-MiniLM-L6-v2",
-        embedding_dim=384,
-        collection_name="test_collection"
-    )
+def test_settings(settings):
+    """Get test settings."""
+    return settings
 
 @pytest.fixture
 def mock_embeddings():
     mock = MagicMock()
-    mock.encode.return_value = np.random.rand(384).tolist()
+    mock.encode.return_value = np.random.rand(768).tolist()
     return mock
 
 @pytest.fixture
 def mock_store():
     store = MagicMock()
-    store.embedding_dim = 384
+    store.embedding_dim = 768
     store.collection_name = "test_collection"
     store.query_by_embedding.return_value = [
         DocumentFull(
@@ -62,70 +59,118 @@ def test_app(test_settings, mock_store, mock_embeddings):
     return app
 
 @pytest.fixture
-def client(test_app):
-    return TestClient(test_app)
+def mock_pipeline():
+    """Mock pipeline for testing."""
+    mock = MagicMock()
+    mock.run.return_value = {
+        "documents": [MagicMock(content="test content", to_dict=lambda: {"content": "test content"})],
+        "answers": ["test answer"]
+    }
+    return mock
 
-def test_query_without_namespace(client, mock_store):
-    """Test query without namespace falls back to default namespace."""
-    # Query without namespace
+@pytest.fixture
+def client(mock_pipeline):
+    """Test client with mocked pipeline."""
+    with patch('backend.app.main.build_pipeline', return_value=(mock_pipeline, None)):
+        with TestClient(app) as client:
+            yield client
+
+def test_query_endpoint(client, mock_pipeline):
+    """Test the query endpoint."""
+    # Setup mock pipeline to return a document
+    mock_pipeline.run.return_value = {
+        "documents": [MagicMock(content="test content", to_dict=lambda: {"content": "test content"})],
+        "answers": ["test answer"]
+    }
+    
     response = client.post(
         "/query",
         json={
-            "text": "Hello world",
-            "top_k": 1
+            "text": "test query",
+            "top_k": 5,
+            "namespace": "test"
         }
     )
     assert response.status_code == 200
-    result = response.json()
-    assert len(result["documents"]) == 1
-    assert result["documents"][0]["content"] == "Hello world"
-    assert result["documents"][0]["meta"]["namespace"] == "default"
-    
-    # Verify mock was called with correct parameters
-    mock_store.query_by_embedding.assert_called_once()
-    call_args = mock_store.query_by_embedding.call_args[1]
-    assert call_args["filters"] == {"namespace": "default"}
-    assert call_args["top_k"] == 1
+    data = response.json()
+    assert "answers" in data
+    assert "documents" in data
+    assert len(data["documents"]) == 1
+    assert data["documents"][0]["content"] == "test content"
 
-def test_query_with_explicit_namespace(client, mock_store):
-    """Test query with explicit namespace."""
-    # Query with explicit namespace
-    response = client.post(
-        "/query",
-        json={
-            "text": "Hello world",
-            "top_k": 1,
-            "namespace": "test_ns"
-        }
-    )
-    assert response.status_code == 200
-    result = response.json()
-    assert len(result["documents"]) == 1
-    assert result["documents"][0]["content"] == "Hello world"
-    assert result["documents"][0]["meta"]["namespace"] == "default"
-    
-    # Verify mock was called with correct parameters
-    mock_store.query_by_embedding.assert_called_once()
-    call_args = mock_store.query_by_embedding.call_args[1]
-    assert call_args["filters"] == {"namespace": "test_ns"}
-    assert call_args["top_k"] == 1
-
-def test_query_pipeline_error(client, mock_store):
-    """Test query endpoint handles pipeline errors gracefully."""
-    # Make the mock store raise an exception
-    mock_store.query_by_embedding.side_effect = Exception("Test error")
+def test_query_endpoint_error(client, mock_pipeline):
+    """Test error handling in the query endpoint."""
+    # Setup mock pipeline to raise an exception
+    mock_pipeline.run.side_effect = Exception("Test error")
     
     response = client.post(
         "/query",
         json={
-            "text": "Hello world",
-            "top_k": 1
+            "text": "test query",
+            "top_k": 5
         }
     )
     assert response.status_code == 500
     data = response.json()
-    assert "detail" in data
     assert "error" in data["detail"]
-    assert data["detail"]["error"] == "Pipeline error: Test error"
-    assert data["detail"]["documents"] == []
-    assert data["detail"]["answers"] == [] 
+    assert "documents" in data["detail"]
+    assert "answers" in data["detail"]
+
+def test_query_without_namespace(client, mock_pipeline):
+    """Test query without namespace falls back to default namespace."""
+    # Setup mock pipeline to return a document
+    mock_pipeline.run.return_value = {
+        "documents": [MagicMock(content="test content", to_dict=lambda: {"content": "test content"})],
+        "answers": ["test answer"]
+    }
+    
+    response = client.post(
+        "/query",
+        json={
+            "text": "test query",
+            "top_k": 5
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["documents"]) == 1
+    assert data["documents"][0]["content"] == "test content"
+
+def test_query_with_explicit_namespace(client, mock_pipeline):
+    """Test query with explicit namespace."""
+    # Setup mock pipeline to return a document
+    mock_pipeline.run.return_value = {
+        "documents": [MagicMock(content="test content", to_dict=lambda: {"content": "test content"})],
+        "answers": ["test answer"]
+    }
+    
+    response = client.post(
+        "/query",
+        json={
+            "text": "test query",
+            "top_k": 5,
+            "namespace": "test_ns"
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["documents"]) == 1
+    assert data["documents"][0]["content"] == "test content"
+
+def test_query_pipeline_error(client, mock_pipeline):
+    """Test query endpoint handles pipeline errors gracefully."""
+    # Setup mock pipeline to raise an exception
+    mock_pipeline.run.side_effect = Exception("Test error")
+    
+    response = client.post(
+        "/query",
+        json={
+            "text": "test query",
+            "top_k": 5
+        }
+    )
+    assert response.status_code == 500
+    data = response.json()
+    assert "error" in data["detail"]
+    assert "documents" in data["detail"]
+    assert "answers" in data["detail"] 

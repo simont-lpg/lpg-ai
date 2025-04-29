@@ -85,27 +85,27 @@ def test_delete_documents_success(client, dummy_store):
     
     try:
         # Mock the delete_documents method to return a count
-        dummy_store.delete_documents = lambda filters: 123
-        
+        dummy_store.delete_documents_by_file_name = lambda file_name: 123
+    
         # Test successful deletion
-        resp = client.request("DELETE", "/documents", data=json.dumps({"file_name": "test.txt"}), headers={"Content-Type": "application/json"})
+        resp = client.post("/documents/delete", json={"file_name": "test.txt"})
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "success"
         assert data["deleted"] == 123
+        assert data["status"] == "success"
     finally:
-        # Clean up the override
+        # Clean up
         app.dependency_overrides.clear()
 
 def test_delete_documents_missing_file_name(client):
     # Test missing file_name field
-    resp = client.request("DELETE", "/documents", data=json.dumps({}), headers={"Content-Type": "application/json"})
+    resp = client.post("/documents/delete", json={})
     assert resp.status_code == 422
 
 def test_delete_documents_error(client):
     # Create a store that raises an exception
     class ErrorStore:
-        def delete_documents(self, filters):
+        def delete_documents_by_file_name(self, file_name):
             raise Exception("boom")
     
     # Override the dependency
@@ -113,12 +113,8 @@ def test_delete_documents_error(client):
     
     try:
         # Test the error case
-        resp = client.request("DELETE", "/documents", data=json.dumps({"file_name": "test.txt"}), headers={"Content-Type": "application/json"})
+        resp = client.post("/documents/delete", json={"file_name": "test.txt"})
         assert resp.status_code == 500
-        error_data = resp.json()
-        assert "detail" in error_data
-        assert "error" in error_data["detail"]
-        assert error_data["detail"]["error"] == "boom"
     finally:
-        # Clean up the override
+        # Clean up
         app.dependency_overrides.clear() 

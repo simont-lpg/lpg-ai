@@ -1,123 +1,90 @@
 from typing import List, Optional, Dict, Any
 import numpy as np
-import os
-import requests
-from sentence_transformers import SentenceTransformer
-from .config import Settings
+from pydantic import BaseModel
 from .schema import DocumentFull
+from sentence_transformers import SentenceTransformer
 import logging
+from .config import Settings
 
-class DummyEmbeddings:
-    """Dummy embeddings for development."""
-    
-    def __init__(self, embedding_dim: int = 384):
-        self.embedding_dim = embedding_dim
-    
-    def encode(self, text: str) -> List[float]:
-        """Return dummy embeddings."""
-        return [0.1] * self.embedding_dim
-    
-    def embed_batch(self, texts: List[str]) -> List[List[float]]:
-        """Return dummy embeddings for a batch of texts."""
-        return [[0.1] * self.embedding_dim for _ in texts]
+logger = logging.getLogger(__name__)
 
 class OllamaEmbeddings:
-    """Embeddings using Ollama API."""
+    """Wrapper for Ollama embeddings API."""
     
     def __init__(self, api_url: str, model_name: str, embedding_dim: int):
         self.api_url = api_url
         self.model_name = model_name
         self.embedding_dim = embedding_dim
-    
+        
     def embed(self, text: str) -> List[float]:
         """Get embedding for a single text."""
-        response = requests.post(
-            f"{self.api_url}/api/embeddings",
-            json={"model": self.model_name, "prompt": text}
-        )
-        if response.status_code != 200:
-            raise Exception(f"Failed to get embedding: {response.text}")
-        return response.json()["embedding"][:self.embedding_dim]
-    
+        import requests
+        try:
+            response = requests.post(
+                f"{self.api_url}/api/embeddings",
+                json={"model": self.model_name, "prompt": text}
+            )
+            response.raise_for_status()
+            return response.json()["embedding"]
+        except Exception as e:
+            logger.error(f"Error getting embedding from Ollama: {str(e)}")
+            raise
+            
     def embed_batch(self, texts: List[str]) -> List[List[float]]:
         """Get embeddings for a batch of texts."""
         return [self.embed(text) for text in texts]
 
 class InMemoryDocumentStore:
-    """Simple in-memory document store with vector similarity search."""
+    """In-memory document store with vector search capabilities."""
     
-    def __init__(self, embedding_dim: int = 384, collection_name: str = "documents", embeddings_model=None):
-        self.documents: List[DocumentFull] = []
-        self.embeddings: List[np.ndarray] = []
+    def __init__(
+        self,
+        embedding_dim: int,
+        collection_name: str,
+        embeddings_model: Any
+    ):
+        if embedding_dim <= 0:
+            raise ValueError("embedding_dim must be greater than 0")
         self.embedding_dim = embedding_dim
-        self._collection_name = collection_name
-        if embeddings_model is None:
-            self.model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-        else:
-            self.model = embeddings_model
-    
-    @property
-    def collection_name(self) -> str:
-        """Get the collection name."""
-        return self._collection_name
-    
-    def write_documents(self, documents: List[DocumentFull]):
-        """Write documents to the store."""
-        for doc in documents:
-            if not doc.id:
-                doc.id = str(len(self.documents))
-            self.documents.append(doc)
-            try:
-                if doc.embedding is not None:
-                    embedding = np.array(doc.embedding)
-                else:
-                    if isinstance(self.model, OllamaEmbeddings):
-                        embedding = self.model.embed_batch([doc.content])[0]
-                    else:
-                        embedding = self.model.encode(doc.content)
-                    embedding = np.array(embedding)
-                    doc.embedding = embedding.tolist()
-                
-                if len(embedding) > self.embedding_dim:
-                    embedding = embedding[:self.embedding_dim]
-                elif len(embedding) < self.embedding_dim:
-                    embedding = np.pad(embedding, (0, self.embedding_dim - len(embedding)))
-                
-                self.embeddings.append(embedding)
-            except Exception as e:
-                raise Exception(f"Failed to process embeddings for document: {str(e)}")
-    
-    def delete_documents(self, document_ids: Optional[List[str]] = None, filters: Optional[dict] = None) -> int:
-        """Delete documents from the store."""
-        indices_to_delete = []
+        self.collection_name = collection_name
+        self.embeddings_model = embeddings_model
+        self.documents: List[DocumentFull] = []
+        self.embeddings: np.ndarray = np.empty((0, embedding_dim))
         
-        if document_ids is not None:
-            for i, doc in enumerate(self.documents):
-                if doc.id in document_ids:
-                    indices_to_delete.append(i)
-        elif filters is not None:
-            for i, doc in enumerate(self.documents):
-                match = True
-                for key, value in filters.items():
-                    if key not in doc.meta or doc.meta[key] != value:
-                        match = False
-                        break
-                if match:
-                    indices_to_delete.append(i)
+    def add_documents(self, documents: List[DocumentFull]) -> None:
+        """Add documents to the store."""
+        if not documents:
+            return
+            
+        # Get embeddings for new documents
+        texts = [doc.content for doc in documents]
+        new_embeddings = self.embeddings_model.embed_batch(texts)
         
-        for i in sorted(indices_to_delete, reverse=True):
-            del self.documents[i]
-            del self.embeddings[i]
+        # Ensure embeddings have the correct dimension and convert to numpy array
+        if isinstance(new_embeddings, list):
+            new_embeddings = np.array(new_embeddings)
+        if new_embeddings.shape[1] != self.embedding_dim:
+            raise ValueError(f"Embedding dimension mismatch: expected {self.embedding_dim}, got {new_embeddings.shape[1]}")
         
-        return len(indices_to_delete)
-    
-    def get_all_documents(self, filters: Optional[dict] = None) -> List[DocumentFull]:
-        """Get all documents, optionally filtered by metadata."""
+        # Add to store
+        self.documents.extend(documents)
+        self.embeddings = np.vstack([self.embeddings, new_embeddings])
+        
+    def write_documents(self, documents: List[DocumentFull]) -> None:
+        """Write documents to the store (alias for add_documents)."""
+        self.add_documents(documents)
+        
+    def get_all_documents(self, filters: Optional[Dict[str, Any]] = None) -> List[DocumentFull]:
+        """Get all documents, optionally filtered."""
         if not filters:
+            # Return documents with their embeddings
+            for i, doc in enumerate(self.documents):
+                doc.embedding = self.embeddings[i].tolist()
             return self.documents
-        
+            
         filtered_docs = []
-        for doc in self.documents:
+        filtered_indices = []
+        for i, doc in enumerate(self.documents):
             match = True
             for key, value in filters.items():
                 if key not in doc.meta or doc.meta[key] != value:
@@ -125,74 +92,143 @@ class InMemoryDocumentStore:
                     break
             if match:
                 filtered_docs.append(doc)
+                filtered_indices.append(i)
+        
+        # Attach embeddings to filtered documents
+        for i, doc in enumerate(filtered_docs):
+            doc.embedding = self.embeddings[filtered_indices[i]].tolist()
         return filtered_docs
-    
-    def query_by_embedding(self, query_embedding: np.ndarray, top_k: int = 5, filters: Optional[dict] = None) -> List[DocumentFull]:
-        """Query documents by embedding similarity."""
+        
+    def query_by_embedding(
+        self,
+        query_embedding: List[float],
+        top_k: int = 5,
+        filters: Optional[Dict[str, Any]] = None
+    ) -> List[DocumentFull]:
+        """Query documents by embedding."""
         if not self.documents:
             return []
-        
+            
+        # Convert query embedding to numpy array if needed
         if isinstance(query_embedding, list):
             query_embedding = np.array(query_embedding)
-        
-        query_embedding = np.array(query_embedding[:self.embedding_dim])
-        
-        # Filter documents by namespace if specified
-        filtered_docs = self.documents
-        filtered_embeddings = self.embeddings
-        
-        if filters and "namespace" in filters:
+            
+        # Apply filters first if specified
+        if filters:
             filtered_docs = []
             filtered_embeddings = []
-            for doc, embedding in zip(self.documents, self.embeddings):
-                if doc.meta.get("namespace") == filters["namespace"]:
+            for doc, emb in zip(self.documents, self.embeddings):
+                match = True
+                for key, value in filters.items():
+                    if key not in doc.meta or doc.meta[key] != value:
+                        match = False
+                        break
+                if match:
                     filtered_docs.append(doc)
-                    filtered_embeddings.append(embedding)
+                    filtered_embeddings.append(emb)
+            if not filtered_docs:
+                return []
+            docs = filtered_docs
+            embeddings = np.stack(filtered_embeddings)
+        else:
+            docs = self.documents
+            embeddings = self.embeddings
         
-        if not filtered_docs:
+        # Calculate similarities
+        similarities = np.dot(embeddings, query_embedding)
+        
+        # Get top k results
+        top_k = min(top_k, len(docs))
+        top_k_indices = np.argsort(similarities)[-top_k:][::-1]
+        results = [docs[i] for i in top_k_indices]
+        
+        return results
+        
+    def delete_documents(self, document_ids: List[str]) -> None:
+        """Delete documents by their IDs."""
+        if not document_ids:
+            return
+            
+        # Find indices of documents to delete
+        indices_to_delete = [
+            i for i, doc in enumerate(self.documents)
+            if doc.id in document_ids
+        ]
+        
+        # Remove documents and their embeddings
+        for i in sorted(indices_to_delete, reverse=True):
+            del self.documents[i]
+            self.embeddings = np.delete(self.embeddings, i, axis=0)
+            
+    def delete_documents_by_file_name(self, file_name: str) -> int:
+        """Delete documents by file name.
+        
+        Args:
+            file_name: The name of the file to delete documents for.
+            
+        Returns:
+            int: The number of documents deleted.
+        """
+        # Find documents with matching file name
+        indices_to_delete = [
+            i for i, doc in enumerate(self.documents)
+            if doc.meta.get("file_name") == file_name
+        ]
+        
+        # Remove documents and their embeddings
+        for i in sorted(indices_to_delete, reverse=True):
+            if i < len(self.documents):
+                del self.documents[i]
+                if i < len(self.embeddings):
+                    self.embeddings = np.delete(self.embeddings, i, axis=0)
+            
+        return len(indices_to_delete)
+        
+    def similarity_search(
+        self,
+        query: str,
+        k: int = 4,
+        score_threshold: Optional[float] = None
+    ) -> List[DocumentFull]:
+        """Search for similar documents."""
+        if not self.documents:
             return []
-        
-        similarities = []
-        for i, embedding in enumerate(filtered_embeddings):
-            query_embedding = np.asarray(query_embedding)
-            doc_embedding = np.asarray(embedding)
             
-            query_norm = np.linalg.norm(query_embedding)
-            doc_norm = np.linalg.norm(doc_embedding)
+        # Get query embedding
+        query_embedding = self.embeddings_model.embed_batch([query])[0]
+        
+        # Ensure query embedding has the correct dimension
+        if isinstance(query_embedding, list):
+            query_embedding = np.array(query_embedding)
+        if query_embedding.shape[0] != self.embedding_dim:
+            raise ValueError(f"Query embedding dimension mismatch: expected {self.embedding_dim}, got {query_embedding.shape[0]}")
+        
+        # Calculate similarities
+        similarities = np.dot(self.embeddings, query_embedding)
+        
+        # Get top k results
+        top_k_indices = np.argsort(similarities)[-k:][::-1]
+        results = [self.documents[i] for i in top_k_indices]
+        
+        # Apply score threshold if specified
+        if score_threshold is not None:
+            results = [
+                doc for i, doc in enumerate(results)
+                if similarities[top_k_indices[i]] >= score_threshold
+            ]
             
-            if query_norm == 0 or doc_norm == 0:
-                similarity = 0
-            else:
-                similarity = np.dot(query_embedding, doc_embedding) / (query_norm * doc_norm)
-            
-            similarities.append(similarity)
-        
-        top_indices = np.argsort(similarities)[-top_k:][::-1]
-        
-        result_docs = []
-        for i in top_indices:
-            doc = filtered_docs[i]
-            doc.score = float(similarities[i])
-            result_docs.append(doc)
-        
-        return result_docs
+        return results
 
 def get_vectorstore(settings: Settings) -> InMemoryDocumentStore:
-    """Get a vector store instance based on settings."""
+    """Get vectorstore instance based on settings."""
     try:
-        if settings.embedding_model_name == "mxbai-embed-large:latest":
-            model = OllamaEmbeddings(
-                api_url=str(settings.ollama_api_url),
-                model_name=settings.embedding_model_name,
-                embedding_dim=settings.embedding_dim
-            )
-        else:
-            model = SentenceTransformer(settings.embedding_model)
-        
+        from .dependencies import get_embedder
+        model = get_embedder(settings)
         return InMemoryDocumentStore(
             embedding_dim=settings.embedding_dim,
             collection_name=settings.collection_name,
             embeddings_model=model
         )
     except Exception as e:
+        logger.error(f"Failed to initialize vectorstore: {str(e)}", exc_info=True)
         raise Exception(f"Failed to initialize vectorstore: {str(e)}") 

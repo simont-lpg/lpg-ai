@@ -1,4 +1,4 @@
-import { config } from './config';
+import { getConfig } from './config';
 
 export interface File {
   filename: string;
@@ -24,7 +24,7 @@ export interface QueryResponse {
 }
 
 export const listFiles = async (): Promise<File[]> => {
-  const response = await fetch(config.api.endpoints.files);
+  const response = await fetch(`${getConfig().apiBaseUrl}/files`);
   if (!response.ok) {
     throw new Error('Failed to fetch files');
   }
@@ -33,7 +33,7 @@ export const listFiles = async (): Promise<File[]> => {
 };
 
 export const deleteDocument = async (fileName: string): Promise<void> => {
-  const response = await fetch(config.api.endpoints.documents, {
+  const response = await fetch(`${getConfig().apiBaseUrl}/documents`, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
@@ -51,7 +51,7 @@ export const uploadFiles = async (files: FileList): Promise<void> => {
     formData.append('files', file);
   });
 
-  const response = await fetch(config.api.endpoints.ingest, {
+  const response = await fetch(`${getConfig().apiBaseUrl}/ingest`, {
     method: 'POST',
     body: formData,
   });
@@ -67,7 +67,7 @@ export const queryRAG = async (
   topK: number = 3,
   fileId?: string
 ): Promise<QueryResponse> => {
-  const response = await fetch(config.api.endpoints.query, {
+  const response = await fetch(`${getConfig().apiBaseUrl}/query`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -1,40 +1,30 @@
 from typing import List, Optional, Tuple, Dict, Any
 import numpy as np
-from sentence_transformers import SentenceTransformer
 from fastapi import Depends
 from .config import Settings, get_settings
 from .schema import DocumentFull
-from .vectorstore import InMemoryDocumentStore, OllamaEmbeddings, DummyEmbeddings, get_vectorstore
+from .vectorstore import InMemoryDocumentStore, get_vectorstore
+from .dependencies import get_embedder, Embedder
 from .generator import OllamaGenerator, DummyGenerator, BaseGenerator
+from sentence_transformers import SentenceTransformer
 import logging
 
-def get_embedder(settings: Settings = Depends(get_settings)):
-    """Get embedder model based on settings."""
-    try:
-        if settings.embedding_model_name == "mxbai-embed-large:latest":
-            return OllamaEmbeddings(
-                api_url=str(settings.ollama_api_url),
-                model_name=settings.embedding_model_name,
-                embedding_dim=settings.embedding_dim
-            )
-        return SentenceTransformer(settings.embedding_model)
-    except Exception as e:
-        raise Exception(f"Failed to initialize embedder: {str(e)}")
+logger = logging.getLogger(__name__)
 
 class Retriever:
     """Document retriever using embeddings and vector similarity search."""
     
-    def __init__(self, document_store: InMemoryDocumentStore, model=None):
+    def __init__(self, document_store: InMemoryDocumentStore, model: Optional[Embedder] = None):
         self.document_store = document_store
         self.model = model
         self.logger = logging.getLogger(__name__)
     
-    def initialize(self):
+    def initialize(self, settings: Settings):
         """Initialize the retriever if needed."""
         if self.model is None:
-            self.model = SentenceTransformer("all-MiniLM-L6-v2")
+            self.model = get_embedder(settings)
     
-    def retrieve(self, query: str, top_k: int = 5, filters: Optional[dict] = None) -> list[DocumentFull]:
+    def retrieve(self, query: str, top_k: int = None, filters: Optional[dict] = None) -> list[DocumentFull]:
         """Retrieve documents for a query."""
         if not query or not query.strip():
             raise ValueError("Query cannot be empty")
@@ -48,23 +38,27 @@ class Retriever:
         self.logger.info(f"Top k: {top_k}")
         
         # Generate query embedding
-        if isinstance(self.model, OllamaEmbeddings):
-            query_embedding = self.model.embed_batch([query])[0]
-        else:
-            query_embedding = self.model.encode(query)
+        query_embedding = self.model.embed_batch([query])[0]
         
         self.logger.info(f"Query embedding shape: {np.array(query_embedding).shape}")
         
         # Convert to numpy array if needed
         if isinstance(query_embedding, list):
             query_embedding = np.array(query_embedding)
+            
+        # Resize query embedding if needed
+        if query_embedding.shape[0] != self.document_store.embedding_dim:
+            self.logger.warning(f"Query embedding dimension ({query_embedding.shape[0]}) does not match document store dimension ({self.document_store.embedding_dim}). Resizing...")
+            if query_embedding.shape[0] > self.document_store.embedding_dim:
+                query_embedding = query_embedding[:self.document_store.embedding_dim]
+            else:
+                query_embedding = np.pad(query_embedding, (0, self.document_store.embedding_dim - query_embedding.shape[0]))
         
         # Retrieve documents with filters
         documents = self.document_store.query_by_embedding(query_embedding, top_k=top_k, filters=filters)
         self.logger.info(f"Retrieved {len(documents)} documents")
         
         if documents:
-            self.logger.info(f"First document score: {documents[0].score}")
             self.logger.info(f"First document content: {documents[0].content[:100]}...")
         else:
             self.logger.warning("No documents retrieved")
@@ -74,9 +68,10 @@ class Retriever:
 class Pipeline:
     """Pipeline for processing RAG queries."""
     
-    def __init__(self, retriever: Retriever, generator: BaseGenerator):
+    def __init__(self, retriever: Retriever, generator: BaseGenerator, settings: Settings):
         self.retriever = retriever
         self.generator = generator
+        self.settings = settings
         self.components = {"Retriever": retriever, "Generator": generator}
         self.logger = logging.getLogger(__name__)
     
@@ -85,9 +80,12 @@ class Pipeline:
         if not params:
             params = {}
         
-        # Get retriever parameters
-        retriever_params = params.get("Retriever", {})
-        top_k = retriever_params.get("top_k", 5)
+        # Get retriever parameters with defaults from settings
+        retriever_params = {
+            **self.settings.pipeline_parameters.get("Retriever", {}),
+            **params.get("Retriever", {})
+        }
+        top_k = retriever_params.get("top_k", self.settings.default_top_k)
         filters = retriever_params.get("filters", None)
         
         try:
@@ -100,17 +98,19 @@ class Pipeline:
             if documents:
                 # Create a prompt with the retrieved documents
                 context = "\n\n".join([doc.content for doc in documents])
-                prompt = f"""Based on the following context, please answer the question. If the answer cannot be found in the context, say "I don't know."
-
-Context:
-{context}
-
-Question: {query}
-
-Answer:"""
+                prompt = self.settings.prompt_template.format(
+                    context=context,
+                    query=query
+                )
+                
+                # Get generator parameters with defaults from settings
+                generator_params = {
+                    **self.settings.pipeline_parameters.get("Generator", {}),
+                    **params.get("Generator", {})
+                }
                 
                 # Generate answer
-                answer = self.generator.generate(prompt)
+                answer = self.generator.generate(prompt, **generator_params)
                 self.logger.info(f"Generated answer: {answer}")
                 
                 return {
@@ -148,15 +148,15 @@ def build_pipeline(
     try:
         # select embedding model
         if dev:
-            embedder = DummyEmbeddings(embedding_dim=settings.embedding_dim)
-        elif settings.embedding_model_name == "mxbai-embed-large:latest":
-            embedder = OllamaEmbeddings(
-                api_url=str(settings.ollama_api_url),
-                model_name=settings.embedding_model_name,
-                embedding_dim=settings.embedding_dim
-            )
+            # Create a dummy embedder for dev/testing
+            class DummyEmbedder:
+                def __init__(self, dim):
+                    self.embedding_dim = dim
+                def embed_batch(self, texts):
+                    return np.zeros((len(texts), self.embedding_dim))
+            embedder = DummyEmbedder(settings.embedding_dim)
         else:
-            embedder = SentenceTransformer(settings.embedding_model)
+            embedder = get_embedder(settings)
             
         # select generator
         generator = DummyGenerator() if dev else OllamaGenerator(
@@ -168,14 +168,17 @@ def build_pipeline(
         retriever = Retriever(document_store=document_store, model=embedder)
         
         # Create pipeline
-        pipeline = Pipeline(retriever=retriever, generator=generator)
+        pipeline = Pipeline(retriever=retriever, generator=generator, settings=settings)
         
         return pipeline, retriever
     except Exception as e:
         logger.error(f"Failed to build pipeline: {str(e)}", exc_info=True)
         raise RuntimeError(f"Failed to build pipeline: {str(e)}")
 
-def get_pipeline(settings: Settings = Depends(get_settings)) -> Pipeline:
+def get_pipeline(
+    settings: Settings = Depends(get_settings),
+    document_store: InMemoryDocumentStore = Depends(get_vectorstore)
+) -> Pipeline:
     """Get pipeline dependency."""
-    pipeline, _ = build_pipeline(settings)
+    pipeline, _ = build_pipeline(settings, document_store)
     return pipeline 

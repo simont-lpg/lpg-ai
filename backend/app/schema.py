@@ -1,20 +1,26 @@
 from pydantic import BaseModel, Field, field_validator, StrictStr, ConfigDict
 from typing import Optional, Dict, List, Any
+import numpy as np
 
-class DocumentMetadata(BaseModel):
-    """Lightweight document model for API documentation."""
-    content: str
-    meta: Dict = {}
+class DocumentMetadataResponse(BaseModel):
+    """Response model for document metadata without content."""
     id: Optional[str] = None
+    meta: Dict = {}
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra='allow')
 
-    def to_dict(self) -> Dict:
-        """Convert document to dictionary."""
+class DocumentMetadata(BaseModel):
+    """Document metadata model."""
+    id: str
+    meta: Dict[str, Any]
+    content: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary."""
         return {
-            "content": self.content,
+            "id": self.id,
             "meta": self.meta,
-            "id": self.id
+            "content": self.content
         }
 
 class DocumentFull(DocumentMetadata):
@@ -24,13 +30,21 @@ class DocumentFull(DocumentMetadata):
 
     def to_dict(self) -> Dict:
         """Convert document to dictionary."""
-        return {
-            "content": self.content,
+        base_dict = {
             "meta": self.meta,
             "id": self.id,
-            "embedding": self.embedding,
-            "score": self.score
+            "content": self.content
         }
+        if self.embedding is not None:
+            if isinstance(self.embedding, np.ndarray):
+                base_dict["embedding"] = self.embedding.tolist()
+            else:
+                base_dict["embedding"] = self.embedding
+        if self.score is not None:
+            base_dict["score"] = float(self.score)
+        return base_dict
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 class Query(BaseModel):
     """Query model for RAG queries."""

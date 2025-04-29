@@ -10,6 +10,11 @@ jest.mock('./api', () => ({
   queryRAG: jest.fn(),
 }));
 
+// Mock the config
+jest.mock('./config', () => ({
+  getConfig: () => ({ apiBaseUrl: "http://test-server" }),
+}));
+
 // Mock the toast
 const mockToast = jest.fn();
 jest.mock('@chakra-ui/react', () => {
@@ -20,10 +25,22 @@ jest.mock('@chakra-ui/react', () => {
   };
 });
 
+// Mock fetch globally
+global.fetch = jest.fn();
+
 describe('App Integration', () => {
   beforeEach(() => {
     // Reset mocks before each test
     jest.clearAllMocks();
+    
+    // Mock the settings response
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      json: async () => ({
+        environment: "development",
+        embedding_model: "MiniLM",
+        generator_model: "tinyllama:latest",
+      }),
+    });
   });
 
   it('handles chat interaction and displays response', async () => {
