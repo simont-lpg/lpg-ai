@@ -5,7 +5,7 @@ import { getConfig } from "../config";
 interface Settings {
   environment: string;
   embedding_model: string;
-  generator_model: string;
+  generator_model_name: string;
 }
 
 export const EnvStatus: React.FC = () => {
@@ -46,7 +46,7 @@ export const EnvStatus: React.FC = () => {
         <>
           <Text>Environment: {settings.environment}</Text>
           <Text>Embed Model: {settings.embedding_model}</Text>
-          <Text>Gen Model: {settings.generator_model}</Text>
+          <Text>Gen Model: {settings.generator_model_name}</Text>
         </>
       ) : null}
     </Box>
