@@ -29,14 +29,14 @@ if [ "$MODE" = "prod" ]; then
     echo "Setting up production environment..."
     if [ -f "$BASE_DIR/backend/.env.production" ]; then
         cp "$BASE_DIR/backend/.env.production" "$BASE_DIR/backend/.env"
-        echo "Copied .env.production to .env"
+        echo "Copied backend/.env.production → backend/.env"
     else
-        echo "Warning: .env.production not found. Using existing .env file."
+        echo "Warning: backend/.env.production is missing"
     fi
 else
-    echo "Using development environment..."
+    echo "Setting up development environment..."
     if [ ! -f "$BASE_DIR/backend/.env" ]; then
-        echo "Warning: .env file not found. Please create it from .env.example"
+        echo "Warning: backend/.env missing, please create from .env.example"
     fi
 fi
 
@@ -60,10 +60,12 @@ cd "$BASE_DIR/backend" || { echo "Error: Could not change to backend directory";
 
 if [ "$MODE" = "dev" ]; then
     # Dev mode: run in foreground with live output
+    echo "Starting backend in dev mode (port 8000)..."
     uvicorn backend.app.main:app --reload --host localhost --port 8000 &
     BACKEND_PID=$!
 else
     # Prod mode: run in background with log redirection
+    echo "Starting backend in prod mode (port 8003)..."
     nohup uvicorn backend.app.main:app --host 0.0.0.0 --port 8003 > "$BASE_DIR/backend-prod.log" 2>&1 &
     BACKEND_PID=$!
 fi
@@ -74,10 +76,12 @@ cd "$BASE_DIR/frontend" || { echo "Error: Could not change to frontend directory
 
 if [ "$MODE" = "dev" ]; then
     # Dev mode: run in foreground with live output
+    echo "Starting frontend in dev mode..."
     npm run dev &
     FRONTEND_PID=$!
 else
     # Prod mode: run in background with log redirection
+    echo "Starting frontend in prod mode..."
     nohup npx serve -s dist -l 5173 > "$BASE_DIR/frontend-prod.log" 2>&1 &
     FRONTEND_PID=$!
 fi

@@ -94,7 +94,7 @@ def test_ingest_happy_path(client, monkeypatch):
     assert body["files_ingested"] == 2
     assert body["total_chunks"] == 6  # 3 chunks per file * 2 files
 
-@pytest.mark.skip(reason="Test takes too long to run")
+# @pytest.mark.skip(reason="Test takes too long to run")
 def test_ingest_large_file(client, monkeypatch, test_data_dir):
     # Create a large test file (simulating Alice in Wonderland)
     large_content = b"Once upon a time..." * 10000  # This creates a ~158KB file
