@@ -23,10 +23,11 @@ check_file_exists() {
 # Function to handle cleanup on script exit
 cleanup() {
     echo "Cleaning up..."
-    if [ -n "${FRONTEND_PID:-}" ]; then
+    # Only kill processes if they're still running
+    if [ -n "${FRONTEND_PID:-}" ] && kill -0 "$FRONTEND_PID" 2>/dev/null; then
         kill "$FRONTEND_PID" 2>/dev/null || true
     fi
-    if [ -n "${BACKEND_PID:-}" ]; then
+    if [ -n "${BACKEND_PID:-}" ] && kill -0 "$BACKEND_PID" 2>/dev/null; then
         kill "$BACKEND_PID" 2>/dev/null || true
     fi
 }
@@ -104,7 +105,7 @@ if [ "$MODE" = "prod" ]; then
     mkdir -p "$BASE_DIR/logs"
     
     # Start backend with logging
-    BASE_DIR="$BASE_DIR" uvicorn backend.app.main:app --host 0.0.0.0 --port "${API_PORT:-8000}" > "$BASE_DIR/logs/backend.log" 2>&1 &
+    BASE_DIR="$BASE_DIR" uvicorn backend.app.main:app --host 0.0.0.0 --port 8003 > "$BASE_DIR/logs/backend.log" 2>&1 &
     BACKEND_PID=$!
     
     # Wait for backend to start
@@ -118,8 +119,8 @@ if [ "$MODE" = "prod" ]; then
     echo "Logs are being written to logs/backend.log"
     echo "Frontend is being served from frontend/dist"
     
-    # Disown the process so it's not killed when the script exits
-    disown "$BACKEND_PID"
+    # Remove the cleanup trap since we want the backend to keep running
+    trap - EXIT
     exit 0
 else
     echo "Setting up development environment..."
