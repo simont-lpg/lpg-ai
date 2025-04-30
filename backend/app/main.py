@@ -48,25 +48,6 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
-# Mount static files in production mode
-if not settings.dev_mode:
-    # Get the absolute path to the frontend dist directory
-    base_dir = os.getenv("BASE_DIR", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    frontend_dist = os.path.join(base_dir, "frontend", "dist")
-    logger.info(f"Mounting static files from {frontend_dist}")
-    
-    # Check if the directory exists
-    if not os.path.exists(frontend_dist):
-        logger.error(f"Frontend dist directory not found at {frontend_dist}")
-        logger.error("Please ensure the frontend has been built before starting the backend")
-        raise RuntimeError(f"Frontend dist directory not found at {frontend_dist}")
-    
-    # Mount static assets under /static
-    app.mount("/static", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="static_assets")
-    
-    # Mount the root directory for index.html
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
-
 app.model_config = ConfigDict(arbitrary_types_allowed=True)
 
 # Custom JSON encoder for numpy arrays
@@ -256,6 +237,25 @@ async def get_files(document_store = Depends(get_document_store)):
     except Exception as e:
         logger.error(f"Error in get_files endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
+
+# Mount static files in production mode
+if not settings.dev_mode:
+    # Get the absolute path to the frontend dist directory
+    base_dir = os.getenv("BASE_DIR", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    frontend_dist = os.path.join(base_dir, "frontend", "dist")
+    logger.info(f"Mounting static files from {frontend_dist}")
+    
+    # Check if the directory exists
+    if not os.path.exists(frontend_dist):
+        logger.error(f"Frontend dist directory not found at {frontend_dist}")
+        logger.error("Please ensure the frontend has been built before starting the backend")
+        raise RuntimeError(f"Frontend dist directory not found at {frontend_dist}")
+    
+    # Mount static assets under /static
+    app.mount("/static", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="static_assets")
+    
+    # Mount the root directory for index.html
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
 # Add catch-all route for SPA at the very end
 @app.get("/{full_path:path}")
