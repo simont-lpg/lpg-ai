@@ -92,6 +92,9 @@ Answer:""",
     def validate_ollama_url(cls, v: AnyUrl) -> AnyUrl:
         """Validate that the Ollama API URL uses http or https scheme."""
         if str(v).startswith(("http://", "https://")):
+            # Log a warning if using localhost/127.0.0.1
+            if "localhost" in str(v) or "127.0.0.1" in str(v):
+                logger.warning("Using localhost/127.0.0.1 for Ollama. This may cause connection issues in production.")
             return v
         raise ValueError("URL scheme should be 'http' or 'https'")
 

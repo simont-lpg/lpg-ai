@@ -15,6 +15,7 @@ import logging
 import numpy as np
 import json
 import os
+import httpx
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -62,6 +63,9 @@ if not settings.dev_mode:
     
     # Mount static assets under /static
     app.mount("/static", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="static_assets")
+    
+    # Mount the root directory for index.html
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
 app.model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -86,7 +90,20 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    try:
+        if settings.dev_mode:
+            # In development mode, just return healthy without checking Ollama
+            return {"status": "healthy", "mode": "development"}
+        
+        # In production, check Ollama connection
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{settings.ollama_api_url}api/tags")
+            if response.status_code != 200:
+                return {"status": "unhealthy", "error": "Ollama service not responding"}
+        return {"status": "healthy", "mode": "production"}
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return {"status": "unhealthy", "error": str(e)}
 
 @app.get("/settings")
 async def read_settings(settings: Settings = Depends(get_settings)):
@@ -243,13 +260,14 @@ async def get_files(document_store = Depends(get_document_store)):
 # Add catch-all route for SPA at the very end
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
-    # Don't serve index.html for API routes in development mode
     if settings.dev_mode:
         if full_path in ["settings", "files", "documents", "query", "ingest", "health"]:
             raise HTTPException(status_code=404, detail="Not found")
         return {"message": "Development mode - API routes are available"}
     
-    # In production mode, serve index.html for all non-API routes
-    if not full_path.startswith(("static/", "settings", "files", "documents", "query", "ingest", "health")):
+    # In production, try to serve the frontend
+    try:
         return FileResponse(os.path.join(frontend_dist, "index.html"))
-    raise HTTPException(status_code=404, detail="Not found")
+    except Exception as e:
+        logger.error(f"Error serving frontend: {str(e)}")
+        raise HTTPException(status_code=404, detail="Not found")
