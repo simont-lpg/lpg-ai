@@ -19,8 +19,4 @@ git clean -fd
 echo "⬇️ Pulling latest code..."
 git pull origin main
 
-# Step 4: Run production restart
-echo "🔄 Running production restart..."
-./restart.sh prod
-
 echo "✅ Deployment completed successfully!" 

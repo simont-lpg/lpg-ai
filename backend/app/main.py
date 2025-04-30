@@ -14,6 +14,7 @@ from pydantic import ConfigDict
 import logging
 import numpy as np
 import json
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -53,8 +54,11 @@ app.add_middleware(
 
 # Mount static files in production mode
 if not settings.dev_mode:
-    logger.info("Mounting static files from frontend/dist")
-    app.mount("/", StaticFiles(directory="../frontend/dist", html=True), name="frontend")
+    # Get the absolute path to the frontend dist directory
+    base_dir = os.getenv("BASE_DIR", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    frontend_dist = os.path.join(base_dir, "frontend", "dist")
+    logger.info(f"Mounting static files from {frontend_dist}")
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
 app.model_config = ConfigDict(arbitrary_types_allowed=True)
 

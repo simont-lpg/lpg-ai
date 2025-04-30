@@ -90,6 +90,12 @@ if [ "$MODE" = "prod" ]; then
     npm ci || { echo "Error: npm ci failed"; exit 1; }
     npm run build || { echo "Error: npm build failed"; exit 1; }
     
+    # Verify frontend build exists
+    if [ ! -d "$BASE_DIR/frontend/dist" ]; then
+        echo "Error: Frontend build failed - dist directory not found"
+        exit 1
+    fi
+    
     # Start backend in production mode
     echo "Starting backend in production mode..."
     cd "$BASE_DIR/backend" || { echo "Error: Could not change to backend directory"; exit 1; }
@@ -98,11 +104,11 @@ if [ "$MODE" = "prod" ]; then
     mkdir -p "$BASE_DIR/logs"
     
     # Start backend with logging
-    uvicorn app.main:app --host 0.0.0.0 --port "${API_PORT:-8000}" > "$BASE_DIR/logs/backend.log" 2>&1 &
+    BASE_DIR="$BASE_DIR" uvicorn app.main:app --host 0.0.0.0 --port "${API_PORT:-8000}" > "$BASE_DIR/logs/backend.log" 2>&1 &
     BACKEND_PID=$!
     
     # Wait for backend to start
-    sleep 2
+    sleep 5
     if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
         echo "Error: Backend failed to start. Check logs/backend.log for details."
         exit 1
@@ -110,6 +116,7 @@ if [ "$MODE" = "prod" ]; then
     
     echo "Backend started successfully with PID $BACKEND_PID"
     echo "Logs are being written to logs/backend.log"
+    echo "Frontend is being served from frontend/dist"
     
     # Disown the process so it's not killed when the script exits
     disown "$BACKEND_PID"
@@ -129,7 +136,7 @@ else
     # Start backend in dev mode
     echo "Starting backend in dev mode..."
     cd "$BASE_DIR/backend" || { echo "Error: Could not change to backend directory"; exit 1; }
-    uvicorn app.main:app --reload --host "${API_HOST:-localhost}" --port "${API_PORT:-8000}" &
+    BASE_DIR="$BASE_DIR" uvicorn app.main:app --reload --host "${API_HOST:-localhost}" --port "${API_PORT:-8000}" &
     BACKEND_PID=$!
     
     # Wait for both processes
