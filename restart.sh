@@ -98,13 +98,13 @@ if [ "$MODE" = "prod" ]; then
     
     # Start backend in production mode
     echo "Starting backend in production mode..."
-    cd "$BASE_DIR/backend" || { echo "Error: Could not change to backend directory"; exit 1; }
+    cd "$BASE_DIR" || { echo "Error: Could not change to base directory"; exit 1; }
     
     # Create logs directory if it doesn't exist
     mkdir -p "$BASE_DIR/logs"
     
     # Start backend with logging
-    BASE_DIR="$BASE_DIR" uvicorn app.main:app --host 0.0.0.0 --port "${API_PORT:-8000}" > "$BASE_DIR/logs/backend.log" 2>&1 &
+    BASE_DIR="$BASE_DIR" uvicorn backend.app.main:app --host 0.0.0.0 --port "${API_PORT:-8000}" > "$BASE_DIR/logs/backend.log" 2>&1 &
     BACKEND_PID=$!
     
     # Wait for backend to start
@@ -135,8 +135,8 @@ else
     
     # Start backend in dev mode
     echo "Starting backend in dev mode..."
-    cd "$BASE_DIR/backend" || { echo "Error: Could not change to backend directory"; exit 1; }
-    BASE_DIR="$BASE_DIR" uvicorn app.main:app --reload --host "${API_HOST:-localhost}" --port "${API_PORT:-8000}" &
+    cd "$BASE_DIR" || { echo "Error: Could not change to base directory"; exit 1; }
+    BASE_DIR="$BASE_DIR" uvicorn backend.app.main:app --reload --host "${API_HOST:-localhost}" --port "${API_PORT:-8000}" &
     BACKEND_PID=$!
     
     # Wait for both processes
