@@ -36,6 +36,21 @@ app = FastAPI(
     }
 )
 
+# Choose origins based on current mode
+if settings.dev_mode:
+    cors_origins = ["*"]
+else:
+    cors_origins = settings.cors_origins
+
+# CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Mount static files in production mode
 if not settings.dev_mode:
     logger.info("Mounting static files from frontend/dist")
