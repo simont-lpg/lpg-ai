@@ -23,6 +23,11 @@ logger = logging.getLogger(__name__)
 # Get settings
 settings = get_settings()
 
+# Force development mode and CORS settings
+settings.dev_mode = True
+settings.cors_origins = ["http://localhost:5173"]
+logger.info("Forcing development mode and CORS settings")
+
 # Log startup mode
 logger.info(f"Starting in {'development' if settings.dev_mode else 'production'} mode")
 
@@ -37,21 +42,14 @@ app = FastAPI(
     }
 )
 
-# Choose origins based on current mode
-if settings.dev_mode:
-    cors_origins = ["*"]  # Allow all origins in development
-    logger.info("CORS: Allowing all origins in development mode")
-else:
-    cors_origins = settings.cors_origins
-    logger.info(f"CORS: Allowing origins: {cors_origins}")
-
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # Mount static files in production mode
@@ -87,7 +85,9 @@ print("SETTINGS LOADED:", settings.model_dump())
 
 @app.get("/")
 async def root():
-    return {"message": "LearnPro Group AI Service is running"}
+    if settings.dev_mode:
+        return {"message": "LearnPro Group AI Service is running"}
+    return FileResponse(os.path.join(frontend_dist, "index.html"))
 
 @app.get("/health")
 async def health_check():
