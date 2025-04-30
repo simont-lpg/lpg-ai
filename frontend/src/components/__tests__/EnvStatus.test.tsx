@@ -16,7 +16,7 @@ describe("EnvStatus", () => {
           Promise.resolve({
             environment: "development",
             embedding_model: "MiniLM",
-            generator_model: "tinyllama:latest",
+            generator_model_name: "tinyllama:latest",
           }),
       })
     );
