@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     # Model Settings
     embedding_model: str = Field(..., description="Name of the embedding model")
     generator_model_name: str = Field(..., description="Name of the generator model")
-    embedding_dim: int = Field(..., description="Dimension of the embeddings")
+    embedding_dim: int = Field(default=1024, description="Dimension of the embeddings")
     ollama_api_url: AnyUrl = Field(..., description="URL of the Ollama API")
     
     # Document Store Settings

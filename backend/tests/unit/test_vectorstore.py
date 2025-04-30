@@ -10,11 +10,11 @@ def mock_embeddings():
     """Mock embeddings model for testing."""
     class MockEmbeddings:
         def encode(self, text):
-            return np.zeros(768)  # Return zero vector
+            return np.zeros(1024)  # Return zero vector
         def embed_batch(self, texts):
-            return [np.zeros(768) for _ in texts]  # Return zero vectors
+            return [np.zeros(1024) for _ in texts]  # Return zero vectors
         def embed(self, text):
-            return [0.0] * 768  # Return list instead of numpy array
+            return [0.0] * 1024  # Return list instead of numpy array
     return MockEmbeddings()
 
 def test_document_store_initialization(settings):
@@ -68,7 +68,7 @@ def test_ollama_embeddings(settings):
 
 def test_vectorstore_initialization():
     """Test basic vectorstore initialization."""
-    settings = Settings()
+    settings = Settings(embedding_dim=1024)
     mock_model = MagicMock()
     mock_model.embedding_dim = settings.embedding_dim
     store = InMemoryDocumentStore(
@@ -138,64 +138,7 @@ def test_vectorstore_query_operations(mock_embeddings, settings):
 
 def test_vectorstore_write_documents(mock_embeddings):
     """Test writing documents to the vectorstore."""
-    settings = Settings()
-    store = InMemoryDocumentStore(
-        embedding_dim=settings.embedding_dim,
-        collection_name=settings.collection_name,
-        embeddings_model=mock_embeddings
-    )
-
-    documents = [
-        DocumentFull(content="Test document 1", id="1", meta={"namespace": "test"}),
-        DocumentFull(content="Test document 2", id="2", meta={"namespace": "test"})
-    ]
-    store.write_documents(documents)
-    assert len(store.get_all_documents()) == 2
-
-def test_vectorstore_delete_documents(mock_embeddings):
-    """Test deleting documents from the vectorstore."""
-    settings = Settings()
-    store = InMemoryDocumentStore(
-        embedding_dim=settings.embedding_dim,
-        collection_name=settings.collection_name,
-        embeddings_model=mock_embeddings
-    )
-    
-    # Add test documents
-    documents = [
-        DocumentFull(content="Test document 1", id="1", meta={"namespace": "test"}),
-        DocumentFull(content="Test document 2", id="2", meta={"namespace": "test"})
-    ]
-    store.write_documents(documents)
-    
-    # Test deletion
-    store.delete_documents(["1"])
-    assert len(store.get_all_documents()) == 1
-    assert store.get_all_documents()[0].id == "2"
-
-def test_vectorstore_ollama_config():
-    """Test vectorstore with Ollama configuration."""
-    settings = Settings(
-        embedding_model="mxbai-embed-large:latest",
-        embedding_dim=768,
-        ollama_api_url="http://localhost:11434",
-        collection_name="test_documents",
-        generator_model_name="mistral-instruct:latest",
-        dev_mode=False
-    )
-    mock_model = MagicMock()
-    mock_model.embedding_dim = settings.embedding_dim
-    store = InMemoryDocumentStore(
-        embedding_dim=settings.embedding_dim,
-        collection_name=settings.collection_name,
-        embeddings_model=mock_model
-    )
-    assert store.embedding_dim == settings.embedding_dim
-    assert store.collection_name == settings.collection_name
-
-def test_vectorstore_write_documents(mock_embeddings):
-    """Test writing documents to the vectorstore."""
-    settings = Settings()
+    settings = Settings(embedding_dim=1024)
     store = InMemoryDocumentStore(
         embedding_dim=settings.embedding_dim,
         collection_name=settings.collection_name,
@@ -215,7 +158,7 @@ def test_vectorstore_write_documents(mock_embeddings):
 
 def test_vectorstore_delete_documents(mock_embeddings):
     """Test deleting documents from the vectorstore."""
-    settings = Settings()
+    settings = Settings(embedding_dim=1024)
     store = InMemoryDocumentStore(
         embedding_dim=settings.embedding_dim,
         collection_name=settings.collection_name,
@@ -237,4 +180,24 @@ def test_vectorstore_delete_documents(mock_embeddings):
     store.delete_documents(["1"])
     assert len(store.documents) == 1
     assert len(store.embeddings) == 1
-    assert store.documents[0].id == "2" 
+    assert store.documents[0].id == "2"
+
+def test_vectorstore_ollama_config():
+    """Test vectorstore with Ollama configuration."""
+    settings = Settings(
+        embedding_model="mxbai-embed-large:latest",
+        embedding_dim=1024,
+        ollama_api_url="http://localhost:11434",
+        collection_name="test_documents",
+        generator_model_name="mistral-instruct:latest",
+        dev_mode=False
+    )
+    mock_model = MagicMock()
+    mock_model.embedding_dim = settings.embedding_dim
+    store = InMemoryDocumentStore(
+        embedding_dim=settings.embedding_dim,
+        collection_name=settings.collection_name,
+        embeddings_model=mock_model
+    )
+    assert store.embedding_dim == settings.embedding_dim
+    assert store.collection_name == settings.collection_name 

@@ -40,9 +40,9 @@ def mock_vectorstore():
 def settings():
     """Test settings."""
     return Settings(
-        embedding_model="all-MiniLM-L6-v2",
+        embedding_model="mxbai-embed-large:latest",
         generator_model_name="mistral:latest",
-        embedding_dim=768,
+        embedding_dim=1024,
         ollama_api_url="http://localhost:11434",
         collection_name="test_collection",
         api_host="0.0.0.0",
@@ -55,35 +55,18 @@ def settings():
         secret_key="test_secret",
         rate_limit_per_minute=60,
         default_top_k=5,
-        prompt_template="""Based on the following context, please answer the question. If the answer cannot be found in the context, say "I don't know."
-
-Context:
-{context}
-
-Question: {query}
-
-Answer:""",
-        pipeline_parameters={
-            "Retriever": {
-                "top_k": 5,
-                "score_threshold": 0.7
-            },
-            "Generator": {
-                "temperature": 0.7,
-                "max_tokens": 1000
-            }
-        }
+        prompt_template="""Based on the following context, please answer the question. If the answer cannot be found in the context, say so."""
     )
 
 @pytest.fixture
-def client(mock_embeddings, mock_vectorstore):
+def client(mock_embeddings, mock_vectorstore, settings):
     """Test client with mocked dependencies."""
     from backend.app.dependencies import get_embedder, get_document_store
     
-    def mock_get_embedder():
+    def mock_get_embedder(settings=None):
         return mock_embeddings
     
-    def mock_get_document_store():
+    def mock_get_document_store(settings=None):
         return mock_vectorstore
     
     app.dependency_overrides[get_embedder] = mock_get_embedder
@@ -121,7 +104,7 @@ def pytest_configure(config):
 
 class MockEmbedder:
     def __init__(self):
-        self.embedding_dim = 768
+        self.embedding_dim = 1024
 
     def embed_documents(self, documents: List[str]) -> List[np.ndarray]:
         return [np.random.rand(self.embedding_dim) for _ in documents]

@@ -13,9 +13,9 @@ def mock_embeddings():
     """Mock embeddings model for testing."""
     class MockEmbeddings:
         def encode(self, text):
-            return np.zeros(768)  # Return zero vector
+            return np.zeros(1024)  # Return zero vector
         def embed_batch(self, texts):
-            return [np.zeros(768) for _ in texts]  # Return zero vectors
+            return [np.zeros(1024) for _ in texts]  # Return zero vectors
     return MockEmbeddings()
 
 @pytest.fixture
@@ -66,7 +66,7 @@ def test_query_integration(client, mock_store, mock_pipeline):
         id="1",
         content="Test content",
         meta={"namespace": "test"},
-        embedding=[0.1] * 768
+        embedding=[0.1] * 1024
     )
     mock_store.add_documents([doc])
     
@@ -97,7 +97,7 @@ def test_documents_integration(client, mock_store):
         id="1",
         content="Test content",
         meta={"namespace": "test"},
-        embedding=[0.1] * 768
+        embedding=[0.1] * 1024
     )
     mock_store.add_documents([doc])
     
@@ -130,13 +130,13 @@ def test_document_store_embeddings(client, mock_store, mock_embeddings):
             id="1",
             content="Test document 1",
             meta={"namespace": "test"},
-            embedding=np.array([0.1] * 768)
+            embedding=np.array([0.1] * 1024)
         ),
         DocumentFull(
             id="2",
             content="Test document 2",
             meta={"namespace": "test"},
-            embedding=np.array([0.1] * 768)
+            embedding=np.array([0.1] * 1024)
         )
     ]
     mock_store.add_documents(docs)
@@ -145,7 +145,7 @@ def test_document_store_embeddings(client, mock_store, mock_embeddings):
     assert len(mock_store.documents) == 2
     assert len(mock_store.embeddings) == 2
     assert all(isinstance(emb, np.ndarray) for emb in mock_store.embeddings)
-    assert all(emb.shape[0] == 768 for emb in mock_store.embeddings)
+    assert all(emb.shape[0] == 1024 for emb in mock_store.embeddings)
 
 def test_upload_document(client, mock_pipeline):
     """Test document upload endpoint."""
@@ -169,7 +169,7 @@ def test_upload_document(client, mock_pipeline):
             self.documents.extend(docs)
 
         def embed_batch(self, texts):
-            return [[0.1] * 768 for _ in texts]
+            return [[0.1] * 1024 for _ in texts]
 
     mock_store = MockDocStore()
     app.dependency_overrides[get_document_store] = lambda: mock_store

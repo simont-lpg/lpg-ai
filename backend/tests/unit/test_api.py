@@ -51,7 +51,7 @@ def test_root_endpoint(client):
     """Test the root endpoint returns correct message."""
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"message": "Haystack RAG Service is running"}
+    assert response.json() == {"message": "LearnPro Group AI Service is running"}
 
 def test_query_endpoint_validation(client):
     """Test query endpoint input validation."""

@@ -9,12 +9,12 @@ def test_valid_settings():
     """Test valid settings configuration."""
     settings = Settings(
         embedding_model="all-MiniLM-L6-v2",
-        embedding_dim=768,
+        embedding_dim=1024,
         ollama_api_url="http://localhost:11434",
         dev_mode=False
     )
     assert settings.embedding_model == "all-MiniLM-L6-v2"
-    assert settings.embedding_dim == 768
+    assert settings.embedding_dim == 1024
     assert str(settings.ollama_api_url).rstrip("/") == "http://localhost:11434"
     assert settings.dev_mode is False
 
@@ -38,7 +38,7 @@ def test_default_settings():
     settings = Settings(
         embedding_model="nomic-embed-text:latest",
         generator_model_name="mistral:latest",
-        embedding_dim=768,
+        embedding_dim=1024,
         ollama_api_url="http://127.0.0.1:11434",
         collection_name="documents",
         api_host="0.0.0.0",
@@ -52,7 +52,7 @@ def test_default_settings():
         rate_limit_per_minute=60
     )
     assert settings.embedding_model == "nomic-embed-text:latest"
-    assert settings.embedding_dim == 768
+    assert settings.embedding_dim == 1024
     assert settings.collection_name == "documents"
     assert settings.dev_mode is False
     assert str(settings.ollama_api_url) == "http://127.0.0.1:11434/"
@@ -124,7 +124,7 @@ def test_config_validation():
         Settings(
             embedding_model="test",
             generator_model_name="test",
-            embedding_dim=768,
+            embedding_dim=1024,
             ollama_api_url="invalid-url",
             collection_name="test",
             api_host="0.0.0.0",

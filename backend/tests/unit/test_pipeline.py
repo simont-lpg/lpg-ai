@@ -10,9 +10,9 @@ def mock_embeddings():
     """Mock embeddings model for testing."""
     class MockEmbeddings:
         def encode(self, text):
-            return np.zeros(768)  # Return zero vector
+            return np.zeros(1024)  # Return zero vector
         def embed_batch(self, texts):
-            return [np.zeros(768) for _ in texts]  # Return zero vectors
+            return [np.zeros(1024) for _ in texts]  # Return zero vectors
     return MockEmbeddings()
 
 @pytest.fixture

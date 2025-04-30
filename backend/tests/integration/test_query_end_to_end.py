@@ -22,9 +22,9 @@ def mock_embeddings():
     """Mock embeddings model for testing."""
     class MockEmbeddings:
         def encode(self, text):
-            return np.zeros(768)  # Return zero vector
+            return np.zeros(1024)  # Return zero vector
         def embed_batch(self, texts):
-            return np.zeros((len(texts), 768))  # Return zero vectors with correct shape
+            return np.zeros((len(texts), 1024))  # Return zero vectors with correct shape
     return MockEmbeddings()
 
 @pytest.fixture
@@ -112,7 +112,7 @@ def test_query_end_to_end(client, mock_store):
         id="1",
         content="Test content",
         meta={"namespace": "test"},
-        embedding=[0.1] * 768
+        embedding=[0.1] * 1024
     )
     mock_store.write_documents([doc])
     
@@ -140,13 +140,13 @@ def test_query_with_namespace(client, mock_store):
             id="1",
             content="Test content 1",
             meta={"namespace": "test1"},
-            embedding=[0.1] * 768
+            embedding=[0.1] * 1024
         ),
         DocumentFull(
             id="2",
             content="Test content 2",
             meta={"namespace": "test2"},
-            embedding=[0.1] * 768
+            embedding=[0.1] * 1024
         )
     ]
     mock_store.write_documents(docs)

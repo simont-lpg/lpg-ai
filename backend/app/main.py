@@ -57,7 +57,7 @@ print("SETTINGS LOADED:", settings.model_dump())
 
 @app.get("/")
 async def root():
-    return {"message": "Haystack RAG Service is running"}
+    return {"message": "LearnPro Group AI Service is running"}
 
 @app.get("/health")
 async def health_check():

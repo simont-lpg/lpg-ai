@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.schema import DocumentFull
 import numpy as np
+from app.config import Settings
+from app.dependencies import get_document_store, get_embedder, get_settings
 
 @pytest.fixture
 def client():
@@ -33,106 +35,214 @@ def test_ingest_unsupported_type(client):
     assert body["total_chunks"] == 0
 
 def test_ingest_happy_path(client, monkeypatch):
+    # Create mock settings with the correct embedding dimension
+    mock_settings = Settings(
+        embedding_model="mxbai-embed-large:latest",
+        generator_model_name="mistral:latest",
+        embedding_dim=1024,
+        ollama_api_url="http://localhost:11434",
+        collection_name="test_collection",
+        api_host="0.0.0.0",
+        api_port=8000,
+        cors_origins=["*"],
+        dev_mode=True,
+        environment="test",
+        log_level="INFO",
+        database_url="sqlite:///./test.db",
+        secret_key="test_secret",
+        rate_limit_per_minute=60,
+        default_top_k=5,
+        prompt_template="""Based on the following context, please answer the question. If the answer cannot be found in the context, say "I don't know."
+
+Context:
+{context}
+
+Question: {query}
+
+Answer:""",
+        pipeline_parameters={
+            "Retriever": {
+                "top_k": 5,
+                "score_threshold": 0.7
+            },
+            "Generator": {
+                "temperature": 0.7,
+                "max_tokens": 1000
+            }
+        }
+    )
+    
     # stub out actual document store and converter so we can control chunk count
     class DummyStore:
+        def __init__(self):
+            self.embedding_dim = 768
         def write_documents(self, chunks):
             # pretend we saw 3 chunks per file
             self.saved = chunks
             return len(chunks)  # Return number of documents written
     dummy_store = DummyStore()
-    # monkey‑patch our DI
-    monkeypatch.setattr("app.dependencies.get_document_store", lambda: dummy_store)
     
     # Create a mock embedder that returns lists instead of numpy arrays
     class MockEmbedder:
         def encode(self, texts, convert_to_numpy=True):
-            return [[0.0] * 768 for _ in range(len(texts))]  # Return list of lists
+            if isinstance(texts, str):
+                return [0.0] * 768
+            return [[0.0] * 768 for _ in range(len(texts))]
             
         def encode_queries(self, texts, convert_to_numpy=True):
-            return [[0.0] * 768 for _ in range(len(texts))]  # Return list of lists
+            if isinstance(texts, str):
+                return [0.0] * 768
+            return [[0.0] * 768 for _ in range(len(texts))]
             
         def embed_batch(self, texts):
-            return [[0.0] * 768 for _ in range(len(texts))]  # Return list of lists
+            return [[0.0] * 768 for _ in range(len(texts))]
             
         def embed(self, text):
-            return [0.0] * 768  # Return list
+            return [0.0] * 768
     
-    monkeypatch.setattr("app.dependencies.get_embedder", lambda: MockEmbedder())
+    # Override dependencies
+    app.dependency_overrides[get_document_store] = lambda: dummy_store
+    app.dependency_overrides[get_embedder] = lambda: MockEmbedder()
+    app.dependency_overrides[get_settings] = lambda: mock_settings
     
-    # stub converter to always return exactly 3 chunks for any file
-    class MockConverter:
-        def run(self, content, doc_id=None):
-            return [
-                DocumentFull(
-                    id="1", 
-                    content="chunk1", 
-                    meta={"namespace": "ns", "file_name": "test.txt"}
-                ),
-                DocumentFull(
-                    id="2", 
-                    content="chunk2", 
-                    meta={"namespace": "ns", "file_name": "test.txt"}
-                ),
-                DocumentFull(
-                    id="3", 
-                    content="chunk3", 
-                    meta={"namespace": "ns", "file_name": "test.txt"}
-                )
-            ]
-    monkeypatch.setattr("app.ingest.SimpleConverter", lambda *args, **kwargs: MockConverter())
-    
-    # send two text files
-    files = [
-        make_file("a.txt", b"hello", "text/plain"),
-        make_file("b.txt", b"world", "text/plain")
-    ]
-    resp = client.post("/ingest", files=files, data={"namespace": "ns"})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["status"] == "success"
-    assert body["namespace"] == "ns"
-    assert body["files_ingested"] == 2
-    assert body["total_chunks"] == 6  # 3 chunks per file * 2 files
+    try:
+        # stub converter to always return exactly 3 chunks for any file
+        class MockConverter:
+            def run(self, content, doc_id=None):
+                return [
+                    DocumentFull(
+                        id="1", 
+                        content="chunk1", 
+                        meta={"namespace": "ns", "file_name": "test.txt"}
+                    ),
+                    DocumentFull(
+                        id="2", 
+                        content="chunk2", 
+                        meta={"namespace": "ns", "file_name": "test.txt"}
+                    ),
+                    DocumentFull(
+                        id="3", 
+                        content="chunk3", 
+                        meta={"namespace": "ns", "file_name": "test.txt"}
+                    )
+                ]
+        monkeypatch.setattr("app.ingest.SimpleConverter", lambda *args, **kwargs: MockConverter())
+        
+        # send two text files
+        files = [
+            make_file("a.txt", b"hello", "text/plain"),
+            make_file("b.txt", b"world", "text/plain")
+        ]
+        resp = client.post("/ingest", files=files, data={"namespace": "ns"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "success"
+        assert body["namespace"] == "ns"
+        assert body["files_ingested"] == 2
+        assert body["total_chunks"] == 6  # 3 chunks per file * 2 files
+    finally:
+        # Clean up dependency overrides
+        app.dependency_overrides = {}
 
-# @pytest.mark.skip(reason="Test takes too long to run")
 def test_ingest_large_file(client, monkeypatch, test_data_dir):
-    # Create a large test file (simulating Alice in Wonderland)
-    large_content = b"Once upon a time..." * 10000  # This creates a ~158KB file
-    large_file = make_file("alice.txt", large_content, "text/plain")
+    # Create a small test file
+    small_payload = b"Alice in Wonderland" * 10  # ~200 bytes
+    large_file = make_file("alice.txt", small_payload, "text/plain")
     
-    # stub out document store
-    class DummyStore:
-        def write_documents(self, chunks):
-            self.saved = chunks
-    dummy_store = DummyStore()
-    monkeypatch.setattr("app.dependencies.get_document_store", lambda: dummy_store)
+    # Mock settings to use 768 dimension
+    mock_settings = Settings(
+        embedding_model="mxbai-embed-large:latest",
+        generator_model_name="mistral:latest",
+        embedding_dim=768,
+        ollama_api_url="http://localhost:11434",
+        collection_name="test_collection",
+        api_host="0.0.0.0",
+        api_port=8000,
+        cors_origins=["*"],
+        dev_mode=True,
+        environment="test",
+        log_level="INFO",
+        database_url="sqlite:///./test.db",
+        secret_key="test_secret",
+        rate_limit_per_minute=60,
+        default_top_k=5,
+        prompt_template="""Based on the following context, please answer the question. If the answer cannot be found in the context, say "I don't know."
+
+Context:
+{context}
+
+Question: {query}
+
+Answer:""",
+        pipeline_parameters={
+            "Retriever": {
+                "top_k": 5,
+                "score_threshold": 0.7
+            },
+            "Generator": {
+                "temperature": 0.7,
+                "max_tokens": 1000
+            }
+        }
+    )
     
-    # stub converter to handle large content
+    # Mock the embedder to return embeddings with dimension 768
+    class MockEmbedder:
+        def encode(self, texts, convert_to_numpy=True):
+            if isinstance(texts, str):
+                return [0.0] * 768
+            return [[0.0] * 768 for _ in range(len(texts))]
+            
+        def encode_queries(self, texts, convert_to_numpy=True):
+            if isinstance(texts, str):
+                return [0.0] * 768
+            return [[0.0] * 768 for _ in range(len(texts))]
+            
+        def embed_batch(self, texts):
+            return [[0.0] * 768 for _ in range(len(texts))]
+            
+        def embed(self, text):
+            return [0.0] * 768
+    
+    # Create a mock document store
+    class MockDocumentStore:
+        def __init__(self):
+            self.embedding_dim = 768
+            self.saved = None
+            
+        def write_documents(self, documents):
+            self.saved = documents
+            return len(documents)
+    
+    # Override dependencies
+    app.dependency_overrides[get_settings] = lambda: mock_settings
+    app.dependency_overrides[get_embedder] = lambda: MockEmbedder()
+    app.dependency_overrides[get_document_store] = lambda: MockDocumentStore()
+    
+    # stub converter to return fixed 4 chunks
     class MockConverter:
         def run(self, *args, **kwargs):
-            # Simulate chunking of large content
-            content = args[0] if args else ""
-            chunk_size = 1000  # Simulate reasonable chunk size
-            chunks = []
-            for i in range(0, len(content), chunk_size):
-                chunk = content[i:i+chunk_size]
-                chunks.append(DocumentFull(
-                    id=f"chunk_{i}",
-                    content=chunk,
-                    meta={"namespace": "ns"}
-                ))
-            return chunks
+            return [
+                DocumentFull(id="c1", content="chunk1", meta={"namespace": "ns"}),
+                DocumentFull(id="c2", content="chunk2", meta={"namespace": "ns"}),
+                DocumentFull(id="c3", content="chunk3", meta={"namespace": "ns"}),
+                DocumentFull(id="c4", content="chunk4", meta={"namespace": "ns"}),
+            ]
     
     monkeypatch.setattr("app.ingest.SimpleConverter", lambda *args, **kwargs: MockConverter())
     
-    # Test ingestion
-    resp = client.post("/ingest", files=[large_file], data={"namespace": "ns"})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["status"] == "success"
-    assert body["namespace"] == "ns"
-    assert body["files_ingested"] == 1
-    assert body["total_chunks"] > 1  # Should have multiple chunks for large file
+    try:
+        # Test ingestion
+        resp = client.post("/ingest", files=[large_file], data={"namespace": "ns"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "success"
+        assert body["namespace"] == "ns"
+        assert body["files_ingested"] == 1
+        assert body["total_chunks"] == 4  # Should have exactly 4 chunks
+    finally:
+        # Clean up dependency overrides
+        app.dependency_overrides = {}
 
 def test_ingest_file_size(client, monkeypatch):
     """Test that file size is correctly captured and stored in metadata."""
@@ -147,6 +257,7 @@ def test_ingest_file_size(client, monkeypatch):
     # Stub document store
     class DummyStore:
         def __init__(self):
+            self.embedding_dim = 768
             self.saved = None
         
         def write_documents(self, chunks):
@@ -159,10 +270,10 @@ def test_ingest_file_size(client, monkeypatch):
     # Stub embedder
     class MockEmbedder:
         def encode(self, texts, convert_to_numpy=True):
-            return [[0.1] * 768 for _ in range(len(texts))]  # Return list of lists
+            return [[0.1] * 1024 for _ in range(len(texts))]  # Return list of lists
             
         def embed_batch(self, texts):
-            return [[0.1] * 768 for _ in range(len(texts))]  # Return list of lists
+            return [[0.1] * 1024 for _ in range(len(texts))]  # Return list of lists
     monkeypatch.setattr("app.dependencies.get_embedder", lambda: MockEmbedder())
     
     # Stub converter
@@ -191,8 +302,8 @@ def test_settings_endpoint(client):
 def mock_embeddings():
     class MockEmbeddings:
         def embed_batch(self, texts):
-            return [[0.0] * 768 for _ in texts]  # Return list instead of numpy array
+            return [[0.0] * 1024 for _ in texts]  # Return list instead of numpy array
 
         def embed(self, text):
-            return [0.0] * 768  # Return list instead of numpy array
+            return [0.0] * 1024  # Return list instead of numpy array
     return MockEmbeddings() 

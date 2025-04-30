@@ -12,7 +12,7 @@ def get_test_settings():
     return Settings(
         embedding_model="all-MiniLM-L6-v2",
         generator_model_name="mistral:latest",
-        embedding_dim=768,
+        embedding_dim=1024,
         ollama_api_url="http://localhost:11434",
         collection_name="test_collection",
         api_host="0.0.0.0",
@@ -47,7 +47,7 @@ Answer:""",
 
 class MockDocumentStore:
     """Mock document store for testing."""
-    def __init__(self, embedding_dim: int = 768, collection_name: str = "test_documents", embeddings_model=None):
+    def __init__(self, embedding_dim: int = 1024, collection_name: str = "test_documents", embeddings_model=None):
         self.documents = []
         self.embeddings = []
         self.embedding_dim = embedding_dim
