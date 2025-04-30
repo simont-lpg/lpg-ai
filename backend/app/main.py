@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
 from typing import List, Optional, Dict, Any
@@ -67,7 +67,8 @@ if not settings.dev_mode:
         logger.error("Please ensure the frontend has been built before starting the backend")
         raise RuntimeError(f"Frontend dist directory not found at {frontend_dist}")
     
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+    # Mount static assets under /static
+    app.mount("/static", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="static_assets")
 
 app.model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -243,3 +244,17 @@ async def get_files(document_store = Depends(get_document_store)):
     except Exception as e:
         logger.error(f"Error in get_files endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
+
+# Add catch-all route for SPA at the very end
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    # Don't serve index.html for API routes in development mode
+    if settings.dev_mode:
+        if full_path in ["settings", "files", "documents", "query", "ingest", "health"]:
+            raise HTTPException(status_code=404, detail="Not found")
+        return {"message": "Development mode - API routes are available"}
+    
+    # In production mode, serve index.html for all non-API routes
+    if not full_path.startswith(("static/", "settings", "files", "documents", "query", "ingest", "health")):
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
+    raise HTTPException(status_code=404, detail="Not found")
