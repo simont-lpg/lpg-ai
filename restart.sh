@@ -27,11 +27,20 @@ fi
 # Handle environment files
 if [ "$MODE" = "prod" ]; then
     echo "Setting up production environment..."
+    # Backend environment
     if [ -f "$BASE_DIR/backend/.env.production" ]; then
         cp "$BASE_DIR/backend/.env.production" "$BASE_DIR/backend/.env"
         echo "Copied backend/.env.production → backend/.env"
     else
         echo "Warning: backend/.env.production is missing"
+    fi
+    
+    # Frontend environment
+    if [ -f "$BASE_DIR/frontend/.env.production" ]; then
+        echo "Copying frontend .env.production → .env"
+        cp "$BASE_DIR/frontend/.env.production" "$BASE_DIR/frontend/.env"
+    else
+        echo "Warning: frontend/.env.production not found"
     fi
 else
     echo "Setting up development environment..."
@@ -80,8 +89,11 @@ if [ "$MODE" = "dev" ]; then
     npm run dev &
     FRONTEND_PID=$!
 else
-    # Prod mode: run in background with log redirection
-    echo "Starting frontend in prod mode..."
+    # Prod mode: build and serve
+    echo "Building frontend for production..."
+    npm install
+    npm run build
+    echo "Serving built frontend..."
     nohup npx serve -s dist -l 5173 > "$BASE_DIR/frontend-prod.log" 2>&1 &
     FRONTEND_PID=$!
 fi
