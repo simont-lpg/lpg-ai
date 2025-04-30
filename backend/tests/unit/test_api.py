@@ -119,7 +119,7 @@ def test_health_check_endpoint(client):
     """Test health check endpoint."""
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "healthy"}
+    assert response.json() == {"status": "healthy", "mode": "development"}
 
 def test_response_model():
     """Test that the Response model correctly validates input."""
