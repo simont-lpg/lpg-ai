@@ -4,6 +4,7 @@ from functools import lru_cache
 from typing import List, Dict, Any
 import logging
 from pathlib import Path
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +72,21 @@ Answer:""",
 
     @field_validator("cors_origins", mode="before")
     def parse_cors_origins(cls, v):
+        logger.info("Parsing CORS origins: %s", v)
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
-        return v
+            try:
+                # Try to parse as JSON first
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return parsed
+            except json.JSONDecodeError:
+                # If not JSON, split by comma
+                return [origin.strip() for origin in v.split(",")]
+        elif isinstance(v, list):
+            return v
+        else:
+            logger.error("Invalid CORS origins format: %s", v)
+            raise ValueError("CORS origins must be a JSON array or comma-separated string")
 
     @field_validator("ollama_api_url")
     def validate_ollama_url(cls, v: AnyUrl) -> AnyUrl:
