@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
+from fastapi.staticfiles import StaticFiles
 from typing import List, Optional, Dict, Any
 from .config import Settings, get_settings
 from .pipeline import build_pipeline, Pipeline, Retriever
@@ -18,6 +19,12 @@ import json
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Get settings
+settings = get_settings()
+
+# Log startup mode
+logger.info(f"Starting in {'development' if settings.dev_mode else 'production'} mode")
+
 app = FastAPI(
     title="LPG AI API",
     description="API for LPG AI",
@@ -28,6 +35,12 @@ app = FastAPI(
         np.floating: lambda x: float(x),
     }
 )
+
+# Mount static files in production mode
+if not settings.dev_mode:
+    logger.info("Mounting static files from frontend/dist")
+    app.mount("/", StaticFiles(directory="../frontend/dist", html=True), name="frontend")
+
 app.model_config = ConfigDict(arbitrary_types_allowed=True)
 
 # Custom JSON encoder for numpy arrays
@@ -39,18 +52,6 @@ class NumpyEncoder(json.JSONEncoder):
 
 # Override the default JSON encoder
 app.json_encoder = NumpyEncoder
-
-# Get settings
-settings = get_settings()
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Print loaded settings
 print("SETTINGS LOADED:", settings.model_dump())
