@@ -108,20 +108,23 @@ if [ "$MODE" = "prod" ]; then
     BASE_DIR="$BASE_DIR" uvicorn backend.app.main:app --host 0.0.0.0 --port 8003 > "$BASE_DIR/logs/backend.log" 2>&1 &
     BACKEND_PID=$!
     
-    # Wait for backend to start
-    sleep 5
-    if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
-        echo "Error: Backend failed to start. Check logs/backend.log for details."
-        exit 1
-    fi
+    # Wait for backend to start and check if port is listening
+    echo "Waiting for backend to start..."
+    for i in {1..30}; do
+        if nc -z localhost 8003; then
+            echo "Backend started successfully with PID $BACKEND_PID"
+            echo "Logs are being written to logs/backend.log"
+            echo "Frontend is being served from frontend/dist"
+            
+            # Remove the cleanup trap since we want the backend to keep running
+            trap - EXIT
+            exit 0
+        fi
+        sleep 1
+    done
     
-    echo "Backend started successfully with PID $BACKEND_PID"
-    echo "Logs are being written to logs/backend.log"
-    echo "Frontend is being served from frontend/dist"
-    
-    # Remove the cleanup trap since we want the backend to keep running
-    trap - EXIT
-    exit 0
+    echo "Error: Backend failed to start. Check logs/backend.log for details."
+    exit 1
 else
     echo "Setting up development environment..."
     
