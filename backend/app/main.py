@@ -23,11 +23,6 @@ logger = logging.getLogger(__name__)
 # Get settings
 settings = get_settings()
 
-# Force development mode and CORS settings
-settings.dev_mode = True
-settings.cors_origins = ["http://localhost:5173"]
-logger.info("Forcing development mode and CORS settings")
-
 # Log startup mode
 logger.info(f"Starting in {'development' if settings.dev_mode else 'production'} mode")
 
@@ -45,7 +40,7 @@ app = FastAPI(
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
