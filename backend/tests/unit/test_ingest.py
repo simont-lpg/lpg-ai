@@ -297,7 +297,7 @@ def test_settings_endpoint(client):
     data = response.json()
     assert "environment" in data
     assert "embedding_model" in data
-    assert "generator_model" in data
+    assert "generator_model_name" in data
 
 def mock_embeddings():
     class MockEmbeddings:

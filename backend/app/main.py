@@ -91,7 +91,7 @@ async def read_settings(settings: Settings = Depends(get_settings)):
     return {
         "environment": settings.environment,
         "embedding_model": settings.embedding_model,
-        "generator_model": settings.generator_model_name
+        "generator_model_name": settings.generator_model_name
     }
 
 @app.post("/query", response_model=Response)

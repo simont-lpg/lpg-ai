@@ -183,7 +183,7 @@ def test_settings_endpoint(client, settings):
     data = response.json()
     assert "environment" in data
     assert "embedding_model" in data
-    assert "generator_model" in data
+    assert "generator_model_name" in data
     assert data["environment"] == settings.environment
     assert data["embedding_model"] == settings.embedding_model
-    assert data["generator_model"] == settings.generator_model_name 
+    assert data["generator_model_name"] == settings.generator_model_name 
