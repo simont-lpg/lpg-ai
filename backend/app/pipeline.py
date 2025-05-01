@@ -85,7 +85,7 @@ class Pipeline:
             **self.settings.pipeline_parameters.get("Retriever", {}),
             **params.get("Retriever", {})
         }
-        top_k = retriever_params.get("top_k", self.settings.default_top_k)
+        top_k = retriever_params.get("top_k", self.settings.retriever_top_k)
         filters = retriever_params.get("filters", None)
         
         try:

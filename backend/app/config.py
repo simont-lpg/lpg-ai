@@ -37,7 +37,14 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = Field(..., description="Maximum requests per minute")
     
     # Pipeline Settings
-    default_top_k: int = Field(default=5, description="Default number of documents to retrieve")
+    retriever_top_k: int = Field(
+        default=5,
+        validation_alias="LPG_AI_TOP_K",
+        description="Max docs to retrieve before filtering"
+    )
+    retriever_score_threshold: float = Field(0.7, env="LPG_AI_SCORE_THRESHOLD", description="Score threshold for document retrieval")
+    generator_temperature: float = Field(0.7, env="LPG_AI_TEMPERATURE", description="Temperature for text generation")
+    generator_max_tokens: int = Field(1000, env="LPG_AI_MAX_TOKENS", description="Maximum tokens for text generation")
     prompt_template: str = Field(
         default="""Based on the following context, please answer the question. If the answer cannot be found in the context, say "I don't know."
 
@@ -49,19 +56,20 @@ Question: {query}
 Answer:""",
         description="Template for the prompt used in the pipeline"
     )
-    pipeline_parameters: Dict[str, Any] = Field(
-        default_factory=lambda: {
+
+    @property
+    def pipeline_parameters(self) -> Dict[str, Dict[str, Any]]:
+        """Get pipeline parameters with current settings."""
+        return {
             "Retriever": {
-                "top_k": 5,
-                "score_threshold": 0.7
+                "top_k": self.retriever_top_k,
+                "score_threshold": self.retriever_score_threshold
             },
             "Generator": {
-                "temperature": 0.7,
-                "max_tokens": 1000
+                "temperature": self.generator_temperature,
+                "max_tokens": self.generator_max_tokens
             }
-        },
-        description="Default parameters for pipeline components"
-    )
+        }
 
     @field_validator("embedding_dim")
     def validate_embedding_dim(cls, v: int) -> int:
@@ -121,7 +129,7 @@ Answer:""",
             self.secret_key,
             self.rate_limit_per_minute,
             self.generator_model_name,
-            self.default_top_k,
+            self.retriever_top_k,
             self.prompt_template,
             pipeline_params
         ))
@@ -145,7 +153,7 @@ Answer:""",
             self.secret_key == other.secret_key and
             self.rate_limit_per_minute == other.rate_limit_per_minute and
             self.generator_model_name == other.generator_model_name and
-            self.default_top_k == other.default_top_k and
+            self.retriever_top_k == other.retriever_top_k and
             self.prompt_template == other.prompt_template and
             self.pipeline_parameters == other.pipeline_parameters
         )
@@ -154,7 +162,19 @@ Answer:""",
         env_file=str(Path(__file__).parent.parent / ".env"),
         env_prefix="LPG_AI_",
         env_file_encoding="utf-8",
+        extra="allow",
+        case_sensitive=False
     )
+
+    @field_validator("retriever_top_k", mode="before")
+    def validate_retriever_top_k(cls, v):
+        """Convert retriever_top_k to integer if it's a string."""
+        if isinstance(v, str):
+            try:
+                return int(v)
+            except ValueError:
+                raise ValueError("retriever_top_k must be a valid integer")
+        return v
 
 @lru_cache()
 def get_settings() -> Settings:
