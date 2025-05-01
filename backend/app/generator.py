@@ -58,7 +58,17 @@ class OllamaGenerator(BaseGenerator):
 
 class DummyGenerator(BaseGenerator):
     def generate(self, prompt: str, **kwargs) -> str:
-        return f"[DEV] {prompt}"
+        # Extract context and query from the prompt
+        context_start = prompt.find("Context:\n") + len("Context:\n")
+        context_end = prompt.find("\n\nQuestion:")
+        context = prompt[context_start:context_end].strip()
+        
+        query_start = prompt.find("Question:") + len("Question:")
+        query_end = prompt.find("\n\nAnswer:")
+        query = prompt[query_start:query_end].strip()
+        
+        # Return a response that includes the context and query
+        return f"[DEV] Here's what I found in the context:\n{context}\n\nQuestion: {query}\n\nAnswer: Based on the context provided."
 
     def stream(self, prompt: str, **kwargs) -> Iterator[str]:
-        yield f"[DEV] {prompt}" 
+        yield self.generate(prompt, **kwargs)

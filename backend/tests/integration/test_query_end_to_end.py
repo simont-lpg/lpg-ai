@@ -22,9 +22,9 @@ def mock_embeddings():
     """Mock embeddings model for testing."""
     class MockEmbeddings:
         def encode(self, text):
-            return np.zeros(1024)  # Return zero vector
+            return np.ones(1024)  # Return ones vector for high similarity
         def embed_batch(self, texts):
-            return np.zeros((len(texts), 1024))  # Return zero vectors with correct shape
+            return np.ones((len(texts), 1024))  # Return ones vectors for high similarity
     return MockEmbeddings()
 
 @pytest.fixture

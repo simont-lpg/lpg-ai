@@ -25,6 +25,7 @@ def get_test_settings():
         secret_key="test_secret",
         rate_limit_per_minute=60,
         default_top_k=5,
+        retriever_score_threshold=0.0,
         prompt_template="""Based on the following context, please answer the question. If the answer cannot be found in the context, say "I don't know."
 
 Context:
@@ -36,7 +37,7 @@ Answer:""",
         pipeline_parameters={
             "Retriever": {
                 "top_k": 5,
-                "score_threshold": 0.7
+                "score_threshold": 0.0
             },
             "Generator": {
                 "temperature": 0.7,

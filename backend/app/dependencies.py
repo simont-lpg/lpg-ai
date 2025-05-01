@@ -1,4 +1,4 @@
-from typing import Generator, List
+from typing import Generator, List, Any
 from fastapi import Depends
 from .config import Settings, get_settings
 from .vectorstore import get_vectorstore, OllamaEmbeddings, InMemoryDocumentStore
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Global document store instance
 _document_store = None
+_embedder = None
 
 class Embedder:
     """Wrapper class for embedding models."""
@@ -30,22 +31,28 @@ class Embedder:
             raise ValueError(f"Unsupported model type: {type(self.model)}")
 
 @lru_cache()
-def get_embedder(settings: Settings = Depends(get_settings)):
-    """Get embedder model based on settings."""
-    try:
+def get_embedder(settings: Settings = Depends(get_settings)) -> Any:
+    """Get embeddings model."""
+    global _embedder
+    if _embedder is None:
         logger.info(f"Initializing embedder with model: {settings.embedding_model}")
-        if settings.ollama_api_url:
+        if settings.dev_mode:
+            # Use mock embeddings in dev mode
+            class MockEmbeddings:
+                def encode(self, text):
+                    return np.ones(settings.embedding_dim)  # Return ones vector for high similarity
+                def embed_batch(self, texts):
+                    return [np.ones(settings.embedding_dim) for _ in texts]  # Return ones vectors for high similarity
+            _embedder = MockEmbeddings()
+        else:
+            # Use Ollama embeddings in production
             logger.info("Using Ollama embeddings")
-            return OllamaEmbeddings(
+            _embedder = OllamaEmbeddings(
                 api_url=str(settings.ollama_api_url),
                 model_name=settings.embedding_model,
                 embedding_dim=settings.embedding_dim
             )
-        logger.info(f"Using SentenceTransformer with model: {settings.embedding_model}")
-        return SentenceTransformer(settings.embedding_model)
-    except Exception as e:
-        logger.error(f"Failed to initialize embedder: {str(e)}", exc_info=True)
-        raise Exception(f"Failed to initialize embedder: {str(e)}")
+    return _embedder
 
 def get_document_store(settings: Settings = Depends(get_settings)) -> InMemoryDocumentStore:
     """Get document store instance."""

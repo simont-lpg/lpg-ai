@@ -56,9 +56,21 @@ class InMemoryDocumentStore:
         if not documents:
             return
             
-        # Get embeddings for new documents
-        texts = [doc.content for doc in documents]
-        new_embeddings = self.embeddings_model.embed_batch(texts)
+        # Get embeddings for new documents if not provided
+        texts = []
+        new_embeddings = []
+        for doc in documents:
+            if doc.embedding is not None:
+                new_embeddings.append(doc.embedding)
+            else:
+                texts.append(doc.content)
+        
+        # Generate embeddings for documents without them
+        if texts:
+            generated_embeddings = self.embeddings_model.embed_batch(texts)
+            if isinstance(generated_embeddings, list):
+                generated_embeddings = np.array(generated_embeddings)
+            new_embeddings.extend(generated_embeddings)
         
         # Ensure embeddings have the correct dimension and convert to numpy array
         if isinstance(new_embeddings, list):
@@ -103,7 +115,8 @@ class InMemoryDocumentStore:
         self,
         query_embedding: List[float],
         top_k: int = 5,
-        filters: Optional[Dict[str, Any]] = None
+        filters: Optional[Dict[str, Any]] = None,
+        settings: Optional[Settings] = None
     ) -> List[DocumentFull]:
         """Query documents by embedding."""
         if not self.documents:
@@ -134,6 +147,15 @@ class InMemoryDocumentStore:
             docs = self.documents
             embeddings = self.embeddings
         
+        # Normalize embeddings for cosine similarity
+        query_norm = np.linalg.norm(query_embedding)
+        if query_norm > 0:
+            query_embedding = query_embedding / query_norm
+        
+        embeddings_norm = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        embeddings_norm[embeddings_norm == 0] = 1  # Avoid division by zero
+        embeddings = embeddings / embeddings_norm
+        
         # Calculate similarities
         similarities = np.dot(embeddings, query_embedding)
         
@@ -141,6 +163,18 @@ class InMemoryDocumentStore:
         top_k = min(top_k, len(docs))
         top_k_indices = np.argsort(similarities)[-top_k:][::-1]
         results = [docs[i] for i in top_k_indices]
+        
+        # Apply score threshold from settings if available
+        if settings is not None and settings.retriever_score_threshold is not None:
+            score_threshold = settings.retriever_score_threshold
+            results = [
+                doc for i, doc in enumerate(results)
+                if similarities[top_k_indices[i]] >= score_threshold
+            ]
+            
+            # Add similarity scores to results
+            for i, doc in enumerate(results):
+                doc.score = float(similarities[top_k_indices[i]])
         
         return results
         
@@ -188,7 +222,8 @@ class InMemoryDocumentStore:
         self,
         query: str,
         k: int = 4,
-        score_threshold: Optional[float] = None
+        score_threshold: Optional[float] = None,
+        settings: Optional[Settings] = None
     ) -> List[DocumentFull]:
         """Search for similar documents."""
         if not self.documents:
@@ -210,7 +245,10 @@ class InMemoryDocumentStore:
         top_k_indices = np.argsort(similarities)[-k:][::-1]
         results = [self.documents[i] for i in top_k_indices]
         
-        # Apply score threshold if specified
+        # Apply score threshold if specified or from settings
+        if score_threshold is None and settings is not None:
+            score_threshold = settings.retriever_score_threshold
+            
         if score_threshold is not None:
             results = [
                 doc for i, doc in enumerate(results)

@@ -14,15 +14,17 @@ logger = logging.getLogger(__name__)
 class Retriever:
     """Document retriever using embeddings and vector similarity search."""
     
-    def __init__(self, document_store: InMemoryDocumentStore, model: Optional[Embedder] = None):
+    def __init__(self, document_store: InMemoryDocumentStore, model: Optional[Embedder] = None, settings: Optional[Settings] = None):
         self.document_store = document_store
         self.model = model
+        self.settings = settings
         self.logger = logging.getLogger(__name__)
     
     def initialize(self, settings: Settings):
         """Initialize the retriever if needed."""
         if self.model is None:
             self.model = get_embedder(settings)
+        self.settings = settings
     
     def retrieve(self, query: str, top_k: int = None, filters: Optional[dict] = None) -> list[DocumentFull]:
         """Retrieve documents for a query."""
@@ -52,10 +54,16 @@ class Retriever:
             if query_embedding.shape[0] > self.document_store.embedding_dim:
                 query_embedding = query_embedding[:self.document_store.embedding_dim]
             else:
+                # Pad with zeros instead of ones to avoid artificially high similarity scores
                 query_embedding = np.pad(query_embedding, (0, self.document_store.embedding_dim - query_embedding.shape[0]))
         
         # Retrieve documents with filters
-        documents = self.document_store.query_by_embedding(query_embedding, top_k=top_k, filters=filters)
+        documents = self.document_store.query_by_embedding(
+            query_embedding, 
+            top_k=top_k, 
+            filters=filters,
+            settings=self.settings
+        )
         self.logger.info(f"Retrieved {len(documents)} documents")
         
         if documents:
@@ -146,29 +154,22 @@ def build_pipeline(
         RuntimeError: If pipeline initialization fails
     """
     try:
-        # select embedding model
+        # Initialize retriever
+        retriever = Retriever(document_store=document_store, settings=settings)
+        retriever.initialize(settings)
+        
+        # Initialize generator
         if dev:
-            # Create a dummy embedder for dev/testing
-            class DummyEmbedder:
-                def __init__(self, dim):
-                    self.embedding_dim = dim
-                def embed_batch(self, texts):
-                    return np.zeros((len(texts), self.embedding_dim))
-            embedder = DummyEmbedder(settings.embedding_dim)
+            generator = DummyGenerator()
         else:
-            embedder = get_embedder(settings)
-            
-        # select generator
-        generator = DummyGenerator() if dev else OllamaGenerator(
-            api_url=str(settings.ollama_api_url),
-            model_name=settings.generator_model_name
+            generator = OllamaGenerator(settings.ollama_api_url, settings.generator_model_name)
+        
+        # Build pipeline
+        pipeline = Pipeline(
+            retriever=retriever,
+            generator=generator,
+            settings=settings
         )
-        
-        # Create retriever
-        retriever = Retriever(document_store=document_store, model=embedder)
-        
-        # Create pipeline
-        pipeline = Pipeline(retriever=retriever, generator=generator, settings=settings)
         
         return pipeline, retriever
     except Exception as e:

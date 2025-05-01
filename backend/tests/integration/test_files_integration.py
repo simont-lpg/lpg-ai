@@ -36,6 +36,7 @@ def test_file_size_integration(client, monkeypatch):
         secret_key="test_secret",
         rate_limit_per_minute=60,
         default_top_k=5,
+        retriever_score_threshold=0.0,  # Set to 0.0 for testing to ensure documents are not filtered out
         prompt_template="""Based on the following context, please answer the question. If the answer cannot be found in the context, say "I don't know."
 
 Context:
@@ -47,7 +48,7 @@ Answer:""",
         pipeline_parameters={
             "Retriever": {
                 "top_k": 5,
-                "score_threshold": 0.7
+                "score_threshold": 0.0  # Set to 0.0 for testing to ensure documents are not filtered out
             },
             "Generator": {
                 "temperature": 0.7,

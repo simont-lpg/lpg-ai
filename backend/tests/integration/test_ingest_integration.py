@@ -5,7 +5,7 @@ import numpy as np
 from fastapi.testclient import TestClient
 from backend.app.vectorstore import InMemoryDocumentStore
 from backend.app.main import app
-from backend.app.dependencies import get_document_store
+from backend.app.dependencies import get_document_store, get_embedder
 from backend.app.config import Settings
 from sentence_transformers import SentenceTransformer
 from backend.app.schema import DocumentFull
@@ -39,8 +39,18 @@ def test_ingest_and_store(client, store, tmp_path):
     """Test document ingestion and storage."""
     # Create test documents
     docs = [
-        DocumentFull(content="Test document 1", id="1", meta={"namespace": "default"}),
-        DocumentFull(content="Test document 2", id="2", meta={"namespace": "default"})
+        DocumentFull(
+            content="Test document 1",
+            id="1",
+            meta={"namespace": "default"},
+            embedding=np.ones(store.embedding_dim)  # Use store's embedding dimension
+        ),
+        DocumentFull(
+            content="Test document 2",
+            id="2",
+            meta={"namespace": "default"},
+            embedding=np.ones(store.embedding_dim)  # Use store's embedding dimension
+        )
     ]
 
     # Ingest documents
@@ -57,6 +67,27 @@ def test_ingest_and_store(client, store, tmp_path):
     assert store.documents[1].content == "Test document 2"
     assert store.documents[0].id == "1"
     assert store.documents[1].id == "2"
+
+    # Create a mock embedder that returns embeddings with the correct dimension
+    class MockEmbedder:
+        def encode(self, texts, convert_to_numpy=True):
+            if isinstance(texts, str):
+                return np.ones(store.embedding_dim)
+            return [np.ones(store.embedding_dim) for _ in range(len(texts))]
+            
+        def encode_queries(self, texts, convert_to_numpy=True):
+            if isinstance(texts, str):
+                return np.ones(store.embedding_dim)
+            return [np.ones(store.embedding_dim) for _ in range(len(texts))]
+            
+        def embed_batch(self, texts):
+            return [np.ones(store.embedding_dim) for _ in range(len(texts))]
+            
+        def embed(self, text):
+            return np.ones(store.embedding_dim)
+
+    # Override the embedder dependency
+    app.dependency_overrides[get_embedder] = lambda: MockEmbedder()
 
     # create a simple text file
     txt = make_txt_file(tmp_path, "This is a test.")

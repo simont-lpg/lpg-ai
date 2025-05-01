@@ -55,7 +55,14 @@ def settings():
         secret_key="test_secret",
         rate_limit_per_minute=60,
         default_top_k=5,
-        prompt_template="""Based on the following context, please answer the question. If the answer cannot be found in the context, say so."""
+        prompt_template="""Based on the following context, please answer the question. If the answer cannot be found in the context, say "I don't know."
+
+Context:
+{context}
+
+Question: {query}
+
+Answer:"""
     )
 
 @pytest.fixture
