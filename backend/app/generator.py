@@ -16,7 +16,7 @@ class BaseGenerator(ABC):
 
 class OllamaGenerator(BaseGenerator):
     def __init__(self, api_url: str, model_name: str, timeout: float = 60):
-        self.api_url = api_url.rstrip('/')
+        self.api_url = str(api_url).rstrip('/')
         self.model_name = model_name
         self.timeout = timeout
 
