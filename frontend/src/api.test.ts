@@ -1,8 +1,36 @@
 import { deleteDocument, listFiles, uploadFiles, queryRAG } from './api';
 import { getConfig } from './config';
 
+// Mock the config module
+jest.mock('./config', () => ({
+  getConfig: jest.fn()
+}));
+
 // Mock fetch globally
 global.fetch = jest.fn();
+
+// Mock DataTransfer
+class MockDataTransfer {
+  private fileList: File[] = [];
+
+  get files() {
+    return Object.assign(this.fileList, {
+      item: (index: number) => this.fileList[index],
+      length: this.fileList.length
+    });
+  }
+
+  get items() {
+    return {
+      add: (file: File) => {
+        this.fileList.push(file);
+      }
+    };
+  }
+}
+
+// @ts-ignore
+global.DataTransfer = MockDataTransfer;
 
 describe('API', () => {
   const mockConfig = {
