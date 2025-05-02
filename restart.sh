@@ -9,17 +9,6 @@ print_usage() {
     exit 1
 }
 
-# Function to check if a file exists and warn if missing
-check_file_exists() {
-    local file="$1"
-    local description="$2"
-    if [ ! -f "$file" ]; then
-        echo "Warning: $description file not found: $file"
-        return 1
-    fi
-    return 0
-}
-
 # Function to handle cleanup on script exit
 cleanup() {
     echo "Cleaning up..."
@@ -73,18 +62,6 @@ source "$BASE_DIR/.venv/bin/activate" || { echo "Error: Could not activate virtu
 if [ "$MODE" = "prod" ]; then
     echo "Setting up production environment..."
     
-    # Check and copy backend environment
-    if check_file_exists "$BASE_DIR/backend/.env.production" "Backend production environment"; then
-        cp "$BASE_DIR/backend/.env.production" "$BASE_DIR/backend/.env"
-        echo "Copied backend/.env.production → backend/.env"
-    fi
-    
-    # Check and copy frontend environment
-    if check_file_exists "$BASE_DIR/frontend/.env.production" "Frontend production environment"; then
-        cp "$BASE_DIR/frontend/.env.production" "$BASE_DIR/frontend/.env"
-        echo "Copied frontend/.env.production → frontend/.env"
-    fi
-    
     # Build frontend
     echo "Building frontend for production..."
     cd "$BASE_DIR/frontend" || { echo "Error: Could not change to frontend directory"; exit 1; }
@@ -127,9 +104,6 @@ if [ "$MODE" = "prod" ]; then
     exit 1
 else
     echo "Setting up development environment..."
-    
-    # Check for development environment files
-    check_file_exists "$BASE_DIR/backend/.env" "Backend development environment"
     
     # Start frontend dev server
     echo "Starting frontend in dev mode..."
