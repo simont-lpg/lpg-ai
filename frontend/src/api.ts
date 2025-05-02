@@ -33,8 +33,8 @@ export const listFiles = async (): Promise<File[]> => {
 };
 
 export const deleteDocument = async (fileName: string): Promise<void> => {
-  const response = await fetch(`${getConfig().apiBaseUrl}/documents`, {
-    method: 'DELETE',
+  const response = await fetch(`${getConfig().apiBaseUrl}/documents/delete`, {
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },

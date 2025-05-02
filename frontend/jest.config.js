@@ -5,7 +5,7 @@ export default {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   setupFilesAfterEnv: ['<rootDir>/src/setupTests.ts'],
-  testMatch: ['**/__tests__/**/*.tsx', '**/?(*.)+(spec|test).tsx'],
+  testMatch: ['**/__tests__/**/*.tsx', '**/?(*.)+(spec|test).(ts|tsx)'],
   transform: {
     '^.+\\.(ts|tsx)$': 'ts-jest',
   },
