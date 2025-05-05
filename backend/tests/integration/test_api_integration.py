@@ -164,24 +164,19 @@ def test_upload_document(client, mock_pipeline):
     class MockDocStore:
         def __init__(self):
             self.documents = []
+            self.embedding_dim = 768
 
-        def write_documents(self, docs):
-            self.documents.extend(docs)
-
-        def embed_batch(self, texts):
-            return [[0.1] * 768 for _ in texts]
-
-        def add(self, documents, metadatas, ids, embeddings=None):
-            if embeddings is None:
-                embeddings = [[0.1] * 768 for _ in documents]
-            for doc, meta, doc_id, embedding in zip(documents, metadatas, ids, embeddings):
+        def add_documents(self, documents):
+            for doc in documents:
                 self.documents.append({
-                    "id": doc_id,
-                    "content": doc,
-                    "meta": meta,
-                    "embedding": embedding
+                    "id": doc.id,
+                    "content": doc.content,
+                    "meta": doc.meta
                 })
             return len(documents)
+
+        def embed_batch(self, texts):
+            return [[0.0] * self.embedding_dim for _ in range(len(texts))]
 
         def get(self, ids=None, where=None):
             if not ids and not where:

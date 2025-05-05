@@ -44,18 +44,57 @@ def client(monkeypatch):
     # Create a mock document store with test data
     class MockStore:
         def __init__(self):
-            self.documents = test_documents
-        
-        def get_all_documents(self, filters=None):
-            return test_documents
+            self.documents = []
+            self.embedding_dim = 768
+
+        def add_documents(self, documents):
+            for doc in documents:
+                self.documents.append({
+                    "id": doc.id,
+                    "content": doc.content,
+                    "meta": doc.meta
+                })
+            return len(documents)
+
+        def get(self, ids=None, where=None):
+            if not ids and not where:
+                return {
+                    "ids": [doc["id"] for doc in self.documents],
+                    "documents": [doc["content"] for doc in self.documents],
+                    "metadatas": [doc["meta"] for doc in self.documents]
+                }
+
+            filtered_docs = []
+            for doc in self.documents:
+                if ids and doc["id"] not in ids:
+                    continue
+                if where:
+                    match = True
+                    for key, value in where.items():
+                        if key not in doc["meta"] or doc["meta"][key] != value:
+                            match = False
+                            break
+                    if not match:
+                        continue
+                filtered_docs.append(doc)
+
+            return {
+                "ids": [doc["id"] for doc in filtered_docs],
+                "documents": [doc["content"] for doc in filtered_docs],
+                "metadatas": [doc["meta"] for doc in filtered_docs]
+            }
     
     # Create a mock embedder
     class MockEmbedder:
         def encode(self, texts, convert_to_numpy=True):
             return [[0.1] * 768] * len(texts)
     
+    # Create and populate mock store
+    mock_store = MockStore()
+    mock_store.add_documents(test_documents)
+    
     # Patch both dependencies
-    monkeypatch.setattr(app.dependencies, "_document_store", MockStore())
+    monkeypatch.setattr(app.dependencies, "_document_store", mock_store)
     monkeypatch.setattr("app.dependencies.get_embedder", lambda: MockEmbedder())
     
     # Create test client

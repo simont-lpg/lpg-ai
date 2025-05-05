@@ -15,21 +15,16 @@ from unittest.mock import MagicMock
 def store(settings):
     """Create a store instance for testing."""
     class MockStore:
-        def __init__(self, embedding_dim, collection_name):
-            self.embedding_dim = embedding_dim
-            self.collection_name = collection_name
+        def __init__(self):
+            self.embedding_dim = 768
             self.documents = []
-            self.embeddings = []
 
-        def add(self, documents, metadatas, ids, embeddings=None):
-            if embeddings is None:
-                embeddings = [[0.0] * self.embedding_dim for _ in documents]
-            for doc, meta, doc_id, embedding in zip(documents, metadatas, ids, embeddings):
+        def add_documents(self, documents):
+            for doc in documents:
                 self.documents.append({
-                    "id": doc_id,
-                    "content": doc,
-                    "meta": meta,
-                    "embedding": embedding
+                    "id": doc.id,
+                    "content": doc.content,
+                    "meta": doc.meta
                 })
             return len(documents)
 
@@ -61,10 +56,7 @@ def store(settings):
                 "metadatas": [doc["meta"] for doc in filtered_docs]
             }
 
-    return MockStore(
-        embedding_dim=settings.embedding_dim,
-        collection_name=settings.collection_name
-    )
+    return MockStore()
 
 @pytest.fixture
 def client(tmp_path, monkeypatch, store):
@@ -80,11 +72,11 @@ def make_txt_file(tmp_path, text):
 def test_ingest_and_store(client, store, tmp_path):
     """Test document ingestion and storage."""
     # Create test documents
-    store.add(
-        documents=["Test document 1", "Test document 2"],
-        metadatas=[{"namespace": "default"}, {"namespace": "default"}],
-        ids=["1", "2"],
-        embeddings=[[0.1] * 1024, [0.1] * 1024]
+    store.add_documents(
+        documents=[
+            DocumentFull(id="1", content="Test document 1", meta={"namespace": "default"}),
+            DocumentFull(id="2", content="Test document 2", meta={"namespace": "default"})
+        ]
     )
 
     # Verify documents were added
@@ -111,19 +103,19 @@ def test_ingest_and_store(client, store, tmp_path):
     class MockEmbedder:
         def encode(self, texts, convert_to_numpy=True):
             if isinstance(texts, str):
-                return np.ones(store.embedding_dim)
-            return [np.ones(store.embedding_dim) for _ in range(len(texts))]
+                return [0.0] * 768
+            return [[0.0] * 768 for _ in range(len(texts))]
             
         def encode_queries(self, texts, convert_to_numpy=True):
             if isinstance(texts, str):
-                return np.ones(store.embedding_dim)
-            return [np.ones(store.embedding_dim) for _ in range(len(texts))]
+                return [0.0] * 768
+            return [[0.0] * 768 for _ in range(len(texts))]
             
         def embed_batch(self, texts):
-            return [np.ones(store.embedding_dim) for _ in range(len(texts))]
+            return [[0.0] * 768 for _ in range(len(texts))]
             
         def embed(self, text):
-            return np.ones(store.embedding_dim)
+            return [0.0] * 768
 
     # Override the embedder dependency
     app.dependency_overrides[get_embedder] = lambda: MockEmbedder()

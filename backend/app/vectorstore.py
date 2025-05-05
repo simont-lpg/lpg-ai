@@ -5,6 +5,7 @@ from .schema import DocumentFull
 from sentence_transformers import SentenceTransformer
 import logging
 from .config import Settings
+from chromadb import Client, Settings as ChromaSettings
 
 logger = logging.getLogger(__name__)
 
@@ -293,16 +294,246 @@ class InMemoryDocumentStore:
             
         return results
 
+class ChromaDocumentStore:
+    """ChromaDB-based document store with vector search capabilities."""
+    
+    def __init__(
+        self,
+        embedding_dim: int,
+        collection_name: str,
+        embeddings_model: Any,
+        persist_directory: str
+    ):
+        if embedding_dim <= 0:
+            raise ValueError("embedding_dim must be greater than 0")
+        self.embedding_dim = embedding_dim
+        self.collection_name = collection_name
+        self.embeddings_model = embeddings_model
+        
+        # Initialize Chroma client
+        try:
+            self.client = Client(ChromaSettings(
+                persist_directory=persist_directory,
+                is_persistent=True
+            ))
+            self.collection = self.client.get_or_create_collection(name=collection_name)
+        except Exception as e:
+            logger.error(f"Failed to initialize ChromaDB: {str(e)}", exc_info=True)
+            raise Exception(f"Failed to initialize ChromaDB: {str(e)}")
+    
+    def add_documents(self, documents: List[DocumentFull]) -> None:
+        """Add documents to the store."""
+        if not documents:
+            return
+            
+        # Get embeddings for new documents if not provided
+        texts = []
+        new_embeddings = []
+        for doc in documents:
+            if doc.embedding is not None:
+                new_embeddings.append(doc.embedding)
+            else:
+                texts.append(doc.content)
+        
+        # Generate embeddings for documents without them
+        if texts:
+            generated_embeddings = self.embeddings_model.embed_batch(texts)
+            if isinstance(generated_embeddings, list):
+                generated_embeddings = np.array(generated_embeddings)
+            new_embeddings.extend(generated_embeddings)
+        
+        # Ensure embeddings have the correct dimension
+        if isinstance(new_embeddings, list):
+            new_embeddings = np.array(new_embeddings)
+        if new_embeddings.shape[1] != self.embedding_dim:
+            raise ValueError(f"Embedding dimension mismatch: expected {self.embedding_dim}, got {new_embeddings.shape[1]}")
+        
+        # Add to ChromaDB
+        try:
+            self.collection.add(
+                documents=[doc.content for doc in documents],
+                metadatas=[doc.meta for doc in documents],
+                ids=[doc.id for doc in documents],
+                embeddings=new_embeddings.tolist()
+            )
+        except Exception as e:
+            logger.error(f"Failed to add documents to ChromaDB: {str(e)}", exc_info=True)
+            raise Exception(f"Failed to add documents to ChromaDB: {str(e)}")
+    
+    def write_documents(self, documents: List[DocumentFull]) -> None:
+        """Write documents to the store (alias for add_documents)."""
+        self.add_documents(documents)
+    
+    def get_all_documents(self, filters: Optional[Dict[str, Any]] = None) -> List[DocumentFull]:
+        """Get all documents, optionally filtered."""
+        try:
+            results = self.collection.get(
+                where=filters if filters else None
+            )
+            
+            documents = []
+            for i in range(len(results["ids"])):
+                doc = DocumentFull(
+                    id=results["ids"][i],
+                    content=results["documents"][i],
+                    meta=results["metadatas"][i]
+                )
+                if "embeddings" in results:
+                    doc.embedding = results["embeddings"][i]
+                documents.append(doc)
+            return documents
+        except Exception as e:
+            logger.error(f"Failed to get documents from ChromaDB: {str(e)}", exc_info=True)
+            raise Exception(f"Failed to get documents from ChromaDB: {str(e)}")
+    
+    def get(self, ids: Optional[List[str]] = None, where: Optional[Dict[str, Any]] = None) -> Dict[str, List]:
+        """Get documents by IDs or filters, matching Chroma's interface."""
+        try:
+            return self.collection.get(
+                ids=ids,
+                where=where
+            )
+        except Exception as e:
+            logger.error(f"Failed to get documents from ChromaDB: {str(e)}", exc_info=True)
+            raise Exception(f"Failed to get documents from ChromaDB: {str(e)}")
+    
+    def query_by_embedding(
+        self,
+        query_embedding: List[float],
+        top_k: int = 5,
+        filters: Optional[Dict[str, Any]] = None,
+        settings: Optional[Settings] = None
+    ) -> List[DocumentFull]:
+        """Query documents by embedding."""
+        try:
+            results = self.collection.query(
+                query_embeddings=[query_embedding],
+                n_results=top_k,
+                where=filters
+            )
+            
+            documents = []
+            for i in range(len(results["ids"][0])):
+                doc = DocumentFull(
+                    id=results["ids"][0][i],
+                    content=results["documents"][0][i],
+                    meta=results["metadatas"][0][i]
+                )
+                if "distances" in results:
+                    doc.score = 1.0 - results["distances"][0][i]  # Convert distance to similarity score
+                documents.append(doc)
+            
+            # Apply score threshold from settings if available
+            if settings is not None and settings.retriever_score_threshold is not None:
+                documents = [
+                    doc for doc in documents
+                    if doc.score is None or doc.score >= settings.retriever_score_threshold
+                ]
+            
+            return documents
+        except Exception as e:
+            logger.error(f"Failed to query documents from ChromaDB: {str(e)}", exc_info=True)
+            raise Exception(f"Failed to query documents from ChromaDB: {str(e)}")
+    
+    def delete_documents(self, document_ids: List[str]) -> None:
+        """Delete documents by their IDs."""
+        if not document_ids:
+            return
+            
+        try:
+            self.collection.delete(ids=document_ids)
+        except Exception as e:
+            logger.error(f"Failed to delete documents from ChromaDB: {str(e)}", exc_info=True)
+            raise Exception(f"Failed to delete documents from ChromaDB: {str(e)}")
+    
+    def delete_documents_by_file_name(self, file_name: str) -> int:
+        """Delete documents by file name."""
+        try:
+            # First get all documents with matching file name
+            results = self.collection.get(
+                where={"file_name": file_name}
+            )
+            
+            if not results["ids"]:
+                return 0
+                
+            # Delete the documents
+            self.collection.delete(ids=results["ids"])
+            return len(results["ids"])
+        except Exception as e:
+            logger.error(f"Failed to delete documents by file name from ChromaDB: {str(e)}", exc_info=True)
+            raise Exception(f"Failed to delete documents by file name from ChromaDB: {str(e)}")
+    
+    def similarity_search(
+        self,
+        query: str,
+        k: int = 4,
+        score_threshold: Optional[float] = None,
+        settings: Optional[Settings] = None
+    ) -> List[DocumentFull]:
+        """Search for similar documents."""
+        try:
+            # Get query embedding
+            query_embedding = self.embeddings_model.embed_batch([query])[0]
+            
+            # Ensure query embedding has the correct dimension
+            if isinstance(query_embedding, list):
+                query_embedding = np.array(query_embedding)
+            if query_embedding.shape[0] != self.embedding_dim:
+                raise ValueError(f"Query embedding dimension mismatch: expected {self.embedding_dim}, got {query_embedding.shape[0]}")
+            
+            # Query ChromaDB
+            results = self.collection.query(
+                query_embeddings=[query_embedding],
+                n_results=k
+            )
+            
+            documents = []
+            for i in range(len(results["ids"][0])):
+                doc = DocumentFull(
+                    id=results["ids"][0][i],
+                    content=results["documents"][0][i],
+                    meta=results["metadatas"][0][i]
+                )
+                if "distances" in results:
+                    doc.score = 1.0 - results["distances"][0][i]  # Convert distance to similarity score
+                documents.append(doc)
+            
+            # Apply score threshold if specified or from settings
+            if score_threshold is None and settings is not None:
+                score_threshold = settings.retriever_score_threshold
+                
+            if score_threshold is not None:
+                documents = [
+                    doc for doc in documents
+                    if doc.score is None or doc.score >= score_threshold
+                ]
+            
+            return documents
+        except Exception as e:
+            logger.error(f"Failed to perform similarity search in ChromaDB: {str(e)}", exc_info=True)
+            raise Exception(f"Failed to perform similarity search in ChromaDB: {str(e)}")
+
 def get_vectorstore(settings: Settings) -> InMemoryDocumentStore:
     """Get vectorstore instance based on settings."""
     try:
         from .dependencies import get_embedder
         model = get_embedder(settings)
-        return InMemoryDocumentStore(
-            embedding_dim=settings.embedding_dim,
-            collection_name=settings.collection_name,
-            embeddings_model=model
-        )
+        
+        # Use ChromaDB in production, InMemoryDocumentStore in development
+        if settings.environment == "production":
+            return ChromaDocumentStore(
+                embedding_dim=settings.embedding_dim,
+                collection_name=settings.collection_name,
+                embeddings_model=model,
+                persist_directory=settings.chroma_dir
+            )
+        else:
+            return InMemoryDocumentStore(
+                embedding_dim=settings.embedding_dim,
+                collection_name=settings.collection_name,
+                embeddings_model=model
+            )
     except Exception as e:
         logger.error(f"Failed to initialize vectorstore: {str(e)}", exc_info=True)
         raise Exception(f"Failed to initialize vectorstore: {str(e)}") 

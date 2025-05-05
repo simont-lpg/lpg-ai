@@ -1,7 +1,7 @@
 from typing import Generator, List, Any
 from fastapi import Depends
 from .config import Settings, get_settings
-from .vectorstore import get_vectorstore, OllamaEmbeddings
+from .vectorstore import get_vectorstore, OllamaEmbeddings, InMemoryDocumentStore
 from .schema import DocumentFull
 from sentence_transformers import SentenceTransformer
 import numpy as np
@@ -55,17 +55,13 @@ def get_embedder(settings: Settings = Depends(get_settings)) -> Any:
             )
     return _embedder
 
-def get_document_store(settings: Settings = Depends(get_settings)) -> Client:
+def get_document_store(settings: Settings = Depends(get_settings)) -> InMemoryDocumentStore:
     """Get document store instance."""
     global _document_store
     
     if _document_store is None:
         try:
-            client = Client(ChromaSettings(
-                persist_directory=settings.chroma_dir,
-                is_persistent=True
-            ))
-            _document_store = client.get_or_create_collection(name=settings.collection_name)
+            _document_store = get_vectorstore(settings)
         except Exception as e:
             raise Exception(f"Failed to initialize document store: {str(e)}")
     

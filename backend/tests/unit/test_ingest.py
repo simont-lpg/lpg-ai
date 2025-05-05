@@ -78,12 +78,12 @@ Answer:""",
             self.embedding_dim = 768
             self.documents = []
             
-        def add(self, documents, metadatas, ids):
-            for doc, meta, doc_id in zip(documents, metadatas, ids):
+        def add_documents(self, documents):
+            for doc in documents:
                 self.documents.append({
-                    "id": doc_id,
-                    "content": doc,
-                    "meta": meta
+                    "id": doc.id,
+                    "content": doc.content,
+                    "meta": doc.meta
                 })
             return len(documents)
             
@@ -244,49 +244,51 @@ Answer:""",
         def __init__(self):
             self.embedding_dim = 768
             self.documents = []
-            
-        def add(self, documents, metadatas, ids):
-            for doc, meta, doc_id in zip(documents, metadatas, ids):
-                self.documents.append({
-                    "id": doc_id,
-                    "content": doc,
-                    "meta": meta
-                })
+            self.embeddings = []
+
+        def add_documents(self, documents):
+            for doc in documents:
+                self.documents.append(doc)
+                if hasattr(doc, 'embedding'):
+                    self.embeddings.append(doc.embedding)
             return len(documents)
-            
+
         def get(self, ids=None, where=None):
             if not ids and not where:
                 return {
-                    "ids": [doc["id"] for doc in self.documents],
-                    "documents": [doc["content"] for doc in self.documents],
-                    "metadatas": [doc["meta"] for doc in self.documents]
+                    "ids": [doc.id for doc in self.documents],
+                    "documents": [doc.content for doc in self.documents],
+                    "metadatas": [doc.meta for doc in self.documents]
                 }
-            
+
             filtered_docs = []
             for doc in self.documents:
-                if ids and doc["id"] not in ids:
+                if ids and doc.id not in ids:
                     continue
                 if where:
                     match = True
                     for key, value in where.items():
-                        if key not in doc["meta"] or doc["meta"][key] != value:
+                        if key not in doc.meta or doc.meta[key] != value:
                             match = False
                             break
                     if not match:
                         continue
                 filtered_docs.append(doc)
-            
+
             return {
-                "ids": [doc["id"] for doc in filtered_docs],
-                "documents": [doc["content"] for doc in filtered_docs],
-                "metadatas": [doc["meta"] for doc in filtered_docs]
+                "ids": [doc.id for doc in filtered_docs],
+                "documents": [doc.content for doc in filtered_docs],
+                "metadatas": [doc.meta for doc in filtered_docs]
             }
 
+    # Create a mock document store
+    mock_store = MockDocumentStore()
+    
     # Override dependencies
     app.dependency_overrides[get_settings] = lambda: mock_settings
     app.dependency_overrides[get_embedder] = lambda: MockEmbedder()
-    app.dependency_overrides[get_document_store] = lambda: MockDocumentStore()
-    
+    app.dependency_overrides[get_document_store] = lambda: mock_store  # Use the same instance
+
     # stub converter to return fixed 4 chunks
     class MockConverter:
         def run(self, *args, **kwargs):
@@ -296,17 +298,16 @@ Answer:""",
                 DocumentFull(id="c3", content="chunk3", meta={"namespace": "ns"}),
                 DocumentFull(id="c4", content="chunk4", meta={"namespace": "ns"}),
             ]
-    
+
     monkeypatch.setattr("app.ingest.SimpleConverter", lambda *args, **kwargs: MockConverter())
-    
+
     try:
         # Test ingestion
         resp = client.post("/ingest", files=[large_file], data={"namespace": "ns"})
         assert resp.status_code == 200
-        
+
         # Verify documents were added
-        store = app.dependency_overrides[get_document_store]()
-        results = store.get()
+        results = mock_store.get()  # Use the same store instance
         assert len(results["documents"]) == 4
         assert all(meta["namespace"] == "ns" for meta in results["metadatas"])
     finally:
@@ -329,12 +330,12 @@ def test_ingest_file_size(client, monkeypatch):
             self.embedding_dim = 768
             self.documents = []
             
-        def add(self, documents, metadatas, ids):
-            for doc, meta, doc_id in zip(documents, metadatas, ids):
+        def add_documents(self, documents):
+            for doc in documents:
                 self.documents.append({
-                    "id": doc_id,
-                    "content": doc,
-                    "meta": meta
+                    "id": doc.id,
+                    "content": doc.content,
+                    "meta": doc.meta
                 })
             return len(documents)
             

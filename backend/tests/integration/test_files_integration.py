@@ -63,24 +63,21 @@ Answer:""",
             self.embedding_dim = 1024
             self.documents = []  # Add documents attribute
             
-        def add(self, documents, metadatas, ids, embeddings=None):
-            if embeddings is None:
-                embeddings = [[0.0] * self.embedding_dim for _ in documents]
-            for doc, meta, doc_id, embedding in zip(documents, metadatas, ids, embeddings):
+        def add_documents(self, documents):
+            for doc in documents:
                 # Ensure each document has the required metadata
-                if not meta:
-                    meta = {}
-                if "file_name" not in meta:
-                    meta["file_name"] = "test.txt"
-                if "namespace" not in meta:
-                    meta["namespace"] = "default"
-                if "file_size" not in meta:
-                    meta["file_size"] = len(test_content)
+                if not doc.meta:
+                    doc.meta = {}
+                if "file_name" not in doc.meta:
+                    doc.meta["file_name"] = "test.txt"
+                if "namespace" not in doc.meta:
+                    doc.meta["namespace"] = "default"
+                if "file_size" not in doc.meta:
+                    doc.meta["file_size"] = len(test_content)
                 self.documents.append({
-                    "id": doc_id,
-                    "content": doc,
-                    "meta": meta,
-                    "embedding": embedding
+                    "id": doc.id,
+                    "content": doc.content,
+                    "meta": doc.meta
                 })
             return len(documents)
         

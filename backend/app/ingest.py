@@ -129,12 +129,7 @@ async def ingest_documents(
             
             # Write all documents at once
             logger.info("Writing documents to store")
-            document_store.add(
-                documents=[doc.content for doc in all_documents],
-                embeddings=[doc.embedding.tolist() for doc in all_documents],
-                metadatas=[doc.meta for doc in all_documents],
-                ids=[doc.id for doc in all_documents]
-            )
+            document_store.add_documents(all_documents)
             logger.info("Successfully wrote documents to store")
         except Exception as e:
             logger.error(f"Failed to process documents: {str(e)}", exc_info=True)
