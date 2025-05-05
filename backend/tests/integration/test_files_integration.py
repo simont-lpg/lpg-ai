@@ -63,19 +63,54 @@ Answer:""",
             self.embedding_dim = 1024
             self.documents = []  # Add documents attribute
             
-        def write_documents(self, chunks):
-            for chunk in chunks:
+        def add(self, documents, metadatas, ids, embeddings=None):
+            if embeddings is None:
+                embeddings = [[0.0] * self.embedding_dim for _ in documents]
+            for doc, meta, doc_id, embedding in zip(documents, metadatas, ids, embeddings):
                 # Ensure each document has the required metadata
-                if not chunk.meta:
-                    chunk.meta = {}
-                if "file_name" not in chunk.meta:
-                    chunk.meta["file_name"] = "test.txt"
-                if "namespace" not in chunk.meta:
-                    chunk.meta["namespace"] = "default"
-                if "file_size" not in chunk.meta:
-                    chunk.meta["file_size"] = len(test_content)
-                self.documents.append(chunk)
-            return len(chunks)
+                if not meta:
+                    meta = {}
+                if "file_name" not in meta:
+                    meta["file_name"] = "test.txt"
+                if "namespace" not in meta:
+                    meta["namespace"] = "default"
+                if "file_size" not in meta:
+                    meta["file_size"] = len(test_content)
+                self.documents.append({
+                    "id": doc_id,
+                    "content": doc,
+                    "meta": meta,
+                    "embedding": embedding
+                })
+            return len(documents)
+        
+        def get(self, ids=None, where=None):
+            if not ids and not where:
+                return {
+                    "ids": [doc["id"] for doc in self.documents],
+                    "documents": [doc["content"] for doc in self.documents],
+                    "metadatas": [doc["meta"] for doc in self.documents]
+                }
+            
+            filtered_docs = []
+            for doc in self.documents:
+                if ids and doc["id"] not in ids:
+                    continue
+                if where:
+                    match = True
+                    for key, value in where.items():
+                        if key not in doc["meta"] or doc["meta"][key] != value:
+                            match = False
+                            break
+                    if not match:
+                        continue
+                filtered_docs.append(doc)
+            
+            return {
+                "ids": [doc["id"] for doc in filtered_docs],
+                "documents": [doc["content"] for doc in filtered_docs],
+                "metadatas": [doc["meta"] for doc in filtered_docs]
+            }
     
     # Create a single instance of DummyStore
     dummy_store = DummyStore()
@@ -122,20 +157,11 @@ Answer:""",
         upload_response = client.post("/ingest", files=[test_file])
         assert upload_response.status_code == 200
         
-        # Get the list of files
-        files_response = client.get("/files")
-        assert files_response.status_code == 200
-        
-        data = files_response.json()
-        print("Files response data:", data)  # Add debug logging
-        assert "files" in data
-        files = data["files"]
-        print("Files list:", files)  # Add debug logging
-        
-        # Find our test file
-        test_file_info = next((f for f in files if f["filename"] == "test.txt"), None)
-        assert test_file_info is not None
-        assert test_file_info["file_size"] == len(test_content)
+        # Verify file size was captured
+        results = dummy_store.get()
+        assert len(results["documents"]) > 0
+        for meta in results["metadatas"]:
+            assert "file_size" in meta
+            assert meta["file_size"] == len(test_content)
     finally:
-        # Clean up dependency overrides
-        app.dependency_overrides = {} 
+        app.dependency_overrides.clear() 

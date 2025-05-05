@@ -191,10 +191,15 @@ async def get_documents(
 ):
     """Get all documents, optionally filtered by namespace."""
     try:
-        filters = {"namespace": namespace} if namespace else None
-        documents = document_store.get_all_documents(filters=filters)
+        # Get all documents from the store
+        where = {"namespace": namespace} if namespace else None
+        results = document_store.get(where=where)
+        
         # Convert to metadata-only response
-        return [DocumentMetadataResponse(id=doc.id, meta=doc.meta) for doc in documents]
+        return [
+            DocumentMetadataResponse(id=doc_id, meta=metadata)
+            for doc_id, metadata in zip(results["ids"], results["metadatas"])
+        ]
     except Exception as e:
         logger.error(f"Error in get_documents endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
@@ -206,34 +211,61 @@ async def delete_documents(
 ):
     """Delete documents by file name."""
     try:
-        deleted_count = document_store.delete_documents_by_file_name(request.file_name)
-        return DeleteDocumentsResponse(deleted=deleted_count)
+        # Get documents with matching file name
+        results = document_store.get(
+            where={"file_name": request.file_name}
+        )
+        
+        if not results["ids"]:
+            return DeleteDocumentsResponse(status="success", deleted=0)
+        
+        # Delete the documents
+        document_store.delete(
+            ids=results["ids"]
+        )
+        
+        return DeleteDocumentsResponse(
+            status="success",
+            deleted=len(results["ids"])
+        )
     except Exception as e:
         logger.error(f"Error in delete_documents endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
 @app.get("/files", response_model=FileListResponse)
 async def get_files(document_store = Depends(get_document_store)):
-    """Get list of files in the document store."""
+    """Get list of all files in the document store."""
     try:
-        # Group documents by filename and namespace
-        file_groups = {}
-        for doc in document_store.documents:
-            if "file_name" in doc.meta:
-                key = (doc.meta["file_name"], doc.meta.get("namespace", "default"))
-                if key not in file_groups:
-                    file_groups[key] = {
-                        "filename": doc.meta["file_name"],
-                        "namespace": doc.meta.get("namespace", "default"),
-                        "document_count": 0,
-                        "id": doc.id,
-                        "file_size": doc.meta.get("file_size", 0)
-                    }
-                file_groups[key]["document_count"] += 1
+        # Get all documents from the store
+        results = document_store.get()
         
-        # Convert to list
-        files = list(file_groups.values())
+        # Create a dictionary to track unique files and their metadata
+        files_dict = {}
+        
+        # Process each document's metadata
+        for doc_id, metadata in zip(results["ids"], results["metadatas"]):
+            if not metadata or "file_name" not in metadata:
+                continue
+                
+            file_name = metadata["file_name"]
+            namespace = metadata.get("namespace", "default")
+            file_size = metadata.get("file_size", 0)
+            
+            if file_name not in files_dict:
+                files_dict[file_name] = {
+                    "filename": file_name,
+                    "namespace": namespace,
+                    "document_count": 1,
+                    "id": doc_id,
+                    "file_size": file_size
+                }
+            else:
+                files_dict[file_name]["document_count"] += 1
+        
+        # Convert to list of FileMetadata objects
+        files = list(files_dict.values())
         return FileListResponse(files=files)
+        
     except Exception as e:
         logger.error(f"Error in get_files endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail={"error": str(e)})

@@ -1,12 +1,13 @@
 from typing import Generator, List, Any
 from fastapi import Depends
 from .config import Settings, get_settings
-from .vectorstore import get_vectorstore, OllamaEmbeddings, InMemoryDocumentStore
+from .vectorstore import get_vectorstore, OllamaEmbeddings
 from .schema import DocumentFull
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from functools import lru_cache
 import logging
+from chromadb import Client, Settings as ChromaSettings
 
 logger = logging.getLogger(__name__)
 
@@ -54,18 +55,17 @@ def get_embedder(settings: Settings = Depends(get_settings)) -> Any:
             )
     return _embedder
 
-def get_document_store(settings: Settings = Depends(get_settings)) -> InMemoryDocumentStore:
+def get_document_store(settings: Settings = Depends(get_settings)) -> Client:
     """Get document store instance."""
     global _document_store
     
     if _document_store is None:
         try:
-            model = get_embedder(settings)
-            _document_store = InMemoryDocumentStore(
-                embedding_dim=settings.embedding_dim,
-                collection_name=settings.collection_name,
-                embeddings_model=model
-            )
+            client = Client(ChromaSettings(
+                persist_directory=settings.chroma_dir,
+                is_persistent=True
+            ))
+            _document_store = client.get_or_create_collection(name=settings.collection_name)
         except Exception as e:
             raise Exception(f"Failed to initialize document store: {str(e)}")
     

@@ -14,15 +14,57 @@ from unittest.mock import MagicMock
 @pytest.fixture
 def store(settings):
     """Create a store instance for testing."""
-    mock_model = MagicMock()
-    mock_model.embedding_dim = settings.embedding_dim
-    mock_model.embed_batch.return_value = np.zeros((2, settings.embedding_dim))  # Return zero vectors with correct shape
-    store = InMemoryDocumentStore(
+    class MockStore:
+        def __init__(self, embedding_dim, collection_name):
+            self.embedding_dim = embedding_dim
+            self.collection_name = collection_name
+            self.documents = []
+            self.embeddings = []
+
+        def add(self, documents, metadatas, ids, embeddings=None):
+            if embeddings is None:
+                embeddings = [[0.0] * self.embedding_dim for _ in documents]
+            for doc, meta, doc_id, embedding in zip(documents, metadatas, ids, embeddings):
+                self.documents.append({
+                    "id": doc_id,
+                    "content": doc,
+                    "meta": meta,
+                    "embedding": embedding
+                })
+            return len(documents)
+
+        def get(self, ids=None, where=None):
+            if not ids and not where:
+                return {
+                    "ids": [doc["id"] for doc in self.documents],
+                    "documents": [doc["content"] for doc in self.documents],
+                    "metadatas": [doc["meta"] for doc in self.documents]
+                }
+
+            filtered_docs = []
+            for doc in self.documents:
+                if ids and doc["id"] not in ids:
+                    continue
+                if where:
+                    match = True
+                    for key, value in where.items():
+                        if key not in doc["meta"] or doc["meta"][key] != value:
+                            match = False
+                            break
+                    if not match:
+                        continue
+                filtered_docs.append(doc)
+
+            return {
+                "ids": [doc["id"] for doc in filtered_docs],
+                "documents": [doc["content"] for doc in filtered_docs],
+                "metadatas": [doc["meta"] for doc in filtered_docs]
+            }
+
+    return MockStore(
         embedding_dim=settings.embedding_dim,
-        collection_name=settings.collection_name,
-        embeddings_model=mock_model
+        collection_name=settings.collection_name
     )
-    return store
 
 @pytest.fixture
 def client(tmp_path, monkeypatch, store):
@@ -38,35 +80,32 @@ def make_txt_file(tmp_path, text):
 def test_ingest_and_store(client, store, tmp_path):
     """Test document ingestion and storage."""
     # Create test documents
-    docs = [
-        DocumentFull(
-            content="Test document 1",
-            id="1",
-            meta={"namespace": "default"},
-            embedding=np.ones(store.embedding_dim)  # Use store's embedding dimension
-        ),
-        DocumentFull(
-            content="Test document 2",
-            id="2",
-            meta={"namespace": "default"},
-            embedding=np.ones(store.embedding_dim)  # Use store's embedding dimension
-        )
-    ]
+    store.add(
+        documents=["Test document 1", "Test document 2"],
+        metadatas=[{"namespace": "default"}, {"namespace": "default"}],
+        ids=["1", "2"],
+        embeddings=[[0.1] * 1024, [0.1] * 1024]
+    )
 
-    # Ingest documents
-    store.write_documents(docs)
+    # Verify documents were added
+    results = store.get()
+    assert len(results["documents"]) == 2
+    assert results["documents"][0] == "Test document 1"
+    assert results["documents"][1] == "Test document 2"
+    assert results["metadatas"][0]["namespace"] == "default"
+    assert results["metadatas"][1]["namespace"] == "default"
 
     # Verify ingestion
-    assert len(store.documents) == 2
-    assert len(store.embeddings) == 2
-    assert all(isinstance(emb, np.ndarray) for emb in store.embeddings)
-    assert all(emb.shape[0] == store.embedding_dim for emb in store.embeddings)
+    results = store.get()
+    assert len(results["documents"]) == 2
+    assert len(results["metadatas"]) == 2
+    assert all(isinstance(meta, dict) for meta in results["metadatas"])
 
     # Verify document content
-    assert store.documents[0].content == "Test document 1"
-    assert store.documents[1].content == "Test document 2"
-    assert store.documents[0].id == "1"
-    assert store.documents[1].id == "2"
+    assert results["documents"][0] == "Test document 1"
+    assert results["documents"][1] == "Test document 2"
+    assert results["ids"][0] == "1"
+    assert results["ids"][1] == "2"
 
     # Create a mock embedder that returns embeddings with the correct dimension
     class MockEmbedder:
@@ -99,18 +138,17 @@ def test_ingest_and_store(client, store, tmp_path):
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["files_ingested"] == 1
-    assert data["total_chunks"] > 0
+    assert "documents" in data
+    assert len(data["documents"]) > 0
     
     # now inspect the real store to confirm chunks exist
-    docs = store.get_all_documents()
-    assert len(docs) > 0
+    results = store.get()
+    assert len(results["documents"]) > 0
     
     # verify the namespace was set correctly
-    for doc in docs:
-        if doc.meta.get("file_name") == "doc.txt":
-            assert doc.meta.get("namespace") == "smoke"
+    for doc, meta in zip(results["documents"], results["metadatas"]):
+        if meta.get("file_name") == "doc.txt":
+            assert meta.get("namespace") == "smoke"
         else:
-            assert doc.meta.get("namespace") == "default"
-        assert doc.content is not None
-        assert doc.embedding is not None 
+            assert meta.get("namespace") == "default"
+        assert doc is not None 

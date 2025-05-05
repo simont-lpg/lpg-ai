@@ -42,7 +42,7 @@ def settings():
     return Settings(
         embedding_model="mxbai-embed-large:latest",
         generator_model_name="mistral:latest",
-        embedding_dim=1024,
+        embedding_dim=768,
         ollama_api_url="http://localhost:11434",
         collection_name="test_collection",
         api_host="0.0.0.0",
@@ -110,7 +110,7 @@ def pytest_configure(config):
 
 class MockEmbedder:
     def __init__(self):
-        self.embedding_dim = 1024
+        self.embedding_dim = 768
 
     def embed_documents(self, documents: List[str]) -> List[np.ndarray]:
         return [np.random.rand(self.embedding_dim) for _ in documents]

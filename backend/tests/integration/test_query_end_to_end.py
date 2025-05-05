@@ -18,13 +18,13 @@ def test_settings(settings):
     return settings
 
 @pytest.fixture
-def mock_embeddings():
+def mock_embeddings(test_settings):
     """Mock embeddings model for testing."""
     class MockEmbeddings:
         def encode(self, text):
-            return np.ones(1024)  # Return ones vector for high similarity
+            return np.ones(test_settings.embedding_dim)  # Return ones vector for high similarity
         def embed_batch(self, texts):
-            return np.ones((len(texts), 1024))  # Return ones vectors for high similarity
+            return np.ones((len(texts), test_settings.embedding_dim))  # Return ones vectors for high similarity
     return MockEmbeddings()
 
 @pytest.fixture
@@ -105,14 +105,14 @@ def test_end_to_end_query_with_namespace(test_settings, mock_store):
     assert len(results) == 1
     assert results[0].meta["namespace"] == "test1"
 
-def test_query_end_to_end(client, mock_store):
+def test_query_end_to_end(client, mock_store, test_settings):
     """Test the query endpoint with mocked dependencies."""
     # Add test document
     doc = DocumentFull(
         id="1",
         content="Test content",
         meta={"namespace": "test"},
-        embedding=[0.1] * 1024
+        embedding=[0.1] * test_settings.embedding_dim
     )
     mock_store.write_documents([doc])
     
@@ -132,7 +132,7 @@ def test_query_end_to_end(client, mock_store):
     assert len(data["documents"]) == 1
     assert data["documents"][0]["content"] == "Test content"
 
-def test_query_with_namespace(client, mock_store):
+def test_query_with_namespace(client, mock_store, test_settings):
     """Test query with namespace filtering."""
     # Add test documents with different namespaces
     docs = [
@@ -140,13 +140,13 @@ def test_query_with_namespace(client, mock_store):
             id="1",
             content="Test content 1",
             meta={"namespace": "test1"},
-            embedding=[0.1] * 1024
+            embedding=[0.1] * test_settings.embedding_dim
         ),
         DocumentFull(
             id="2",
             content="Test content 2",
             meta={"namespace": "test2"},
-            embedding=[0.1] * 1024
+            embedding=[0.1] * test_settings.embedding_dim
         )
     ]
     mock_store.write_documents(docs)

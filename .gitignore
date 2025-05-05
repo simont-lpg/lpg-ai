@@ -34,6 +34,7 @@ ENV/
 # Project specific
 data/
 chroma/
+chroma_db/
 *.db
 *.sqlite3
 backend/tests/data/
@@ -66,7 +67,7 @@ docker-compose.override.yml
 .env
 .venv
 frontend/.env
-!backend/.env
+backend/.env
 !backend/.env.example
 backend/.env.production
 

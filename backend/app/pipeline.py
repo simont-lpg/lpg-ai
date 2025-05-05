@@ -49,13 +49,13 @@ class Retriever:
             query_embedding = np.array(query_embedding)
             
         # Resize query embedding if needed
-        if query_embedding.shape[0] != self.document_store.embedding_dim:
-            self.logger.warning(f"Query embedding dimension ({query_embedding.shape[0]}) does not match document store dimension ({self.document_store.embedding_dim}). Resizing...")
-            if query_embedding.shape[0] > self.document_store.embedding_dim:
-                query_embedding = query_embedding[:self.document_store.embedding_dim]
+        if query_embedding.shape[0] != self.settings.embedding_dim:
+            self.logger.warning(f"Query embedding dimension ({query_embedding.shape[0]}) does not match settings dimension ({self.settings.embedding_dim}). Resizing...")
+            if query_embedding.shape[0] > self.settings.embedding_dim:
+                query_embedding = query_embedding[:self.settings.embedding_dim]
             else:
                 # Pad with zeros instead of ones to avoid artificially high similarity scores
-                query_embedding = np.pad(query_embedding, (0, self.document_store.embedding_dim - query_embedding.shape[0]))
+                query_embedding = np.pad(query_embedding, (0, self.settings.embedding_dim - query_embedding.shape[0]))
         
         # Retrieve documents with filters
         documents = self.document_store.query_by_embedding(

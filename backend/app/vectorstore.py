@@ -110,6 +110,42 @@ class InMemoryDocumentStore:
         for i, doc in enumerate(filtered_docs):
             doc.embedding = self.embeddings[filtered_indices[i]].tolist()
         return filtered_docs
+
+    def get(self, ids: Optional[List[str]] = None, where: Optional[Dict[str, Any]] = None) -> Dict[str, List]:
+        """Get documents by IDs or filters, matching Chroma's interface."""
+        if ids is not None:
+            # Filter by IDs
+            filtered_docs = []
+            filtered_indices = []
+            for i, doc in enumerate(self.documents):
+                if doc.id in ids:
+                    filtered_docs.append(doc)
+                    filtered_indices.append(i)
+        elif where is not None:
+            # Filter by metadata
+            filtered_docs = []
+            filtered_indices = []
+            for i, doc in enumerate(self.documents):
+                match = True
+                for key, value in where.items():
+                    if key not in doc.meta or doc.meta[key] != value:
+                        match = False
+                        break
+                if match:
+                    filtered_docs.append(doc)
+                    filtered_indices.append(i)
+        else:
+            # Return all documents
+            filtered_docs = self.documents
+            filtered_indices = list(range(len(self.documents)))
+
+        # Return in Chroma's format
+        return {
+            "ids": [doc.id for doc in filtered_docs],
+            "metadatas": [doc.meta for doc in filtered_docs],
+            "documents": [doc.content for doc in filtered_docs],
+            "embeddings": [self.embeddings[i].tolist() for i in filtered_indices]
+        }
         
     def query_by_embedding(
         self,

@@ -1,11 +1,10 @@
 from app.config import Settings
-from app.schema import Document
+from app.schema import DocumentFull
 from unittest.mock import Mock
 import numpy as np
 from typing import Optional, List
 import pytest
 from backend.app.vectorstore import InMemoryDocumentStore
-from backend.app.schema import DocumentFull
 
 def get_test_settings():
     """Get test settings."""
@@ -59,60 +58,95 @@ class MockDocumentStore:
         """Get the collection name."""
         return self._collection_name
     
-    def delete_documents(self, document_ids: Optional[List[str]] = None):
+    def delete(self, ids: Optional[List[str]] = None):
         """Delete documents from the store."""
-        if document_ids is None:
+        if ids is None:
             self.documents = []
             self.embeddings = []
             return
         
         indices_to_delete = []
         for i, doc in enumerate(self.documents):
-            if doc.id in document_ids:
+            if doc.id in ids:
                 indices_to_delete.append(i)
         
         for i in sorted(indices_to_delete, reverse=True):
             del self.documents[i]
             del self.embeddings[i]
     
-    def write_documents(self, documents: List[Document]):
-        """Write documents to store."""
-        for doc in documents:
-            if isinstance(doc, dict):
-                doc = Document(**doc)
-            if not doc.id:
-                doc.id = str(len(self.documents))
-            # Store the document as is
-            self.documents.append(doc)
-            # Mock embedding as zeros array
-            embedding = np.zeros(self.embedding_dim).tolist()
+    def add(self, documents: List[str], metadatas: List[dict], ids: List[str], embeddings: Optional[List[List[float]]] = None):
+        """Add documents to store using Chroma's interface."""
+        if embeddings is None:
+            embeddings = [np.zeros(self.embedding_dim).tolist() for _ in documents]
+            
+        for doc, meta, doc_id, embedding in zip(documents, metadatas, ids, embeddings):
+            # Store the document
+            self.documents.append(DocumentFull(
+                id=doc_id,
+                content=doc,
+                meta=meta
+            ))
+            # Store the embedding
             self.embeddings.append(np.array(embedding))
     
-    def get_all_documents(self, filters: Optional[dict] = None) -> List[Document]:
-        """Get all documents, optionally filtered."""
-        if not filters:
-            return self.documents
+    def get(self, ids: Optional[List[str]] = None, where: Optional[dict] = None) -> dict:
+        """Get documents using Chroma's interface."""
+        if not ids and not where:
+            return {
+                "ids": [doc.id for doc in self.documents],
+                "documents": [doc.content for doc in self.documents],
+                "metadatas": [doc.meta for doc in self.documents]
+            }
         
         filtered_docs = []
         for doc in self.documents:
-            match = True
-            for key, value in filters.items():
-                if key not in doc.meta or doc.meta[key] != value:
-                    match = False
-                    break
-            if match:
-                filtered_docs.append(doc)
-        return filtered_docs
-    
-    def query_by_embedding(self, query_embedding: np.ndarray, top_k: int = 5) -> List[Document]:
-        """Mock query by embedding - returns first top_k documents."""
-        if not self.documents:
-            return []
+            if ids and doc.id not in ids:
+                continue
+            if where:
+                match = True
+                for key, value in where.items():
+                    if key not in doc.meta or doc.meta[key] != value:
+                        match = False
+                        break
+                if not match:
+                    continue
+            filtered_docs.append(doc)
         
-        result_docs = self.documents[:top_k]
-        for doc in result_docs:
-            doc.score = 1.0  # Mock perfect similarity score
-        return result_docs 
+        return {
+            "ids": [doc.id for doc in filtered_docs],
+            "documents": [doc.content for doc in filtered_docs],
+            "metadatas": [doc.meta for doc in filtered_docs]
+        }
+    
+    def query(self, query_embeddings: List[List[float]], n_results: int = 5, where: Optional[dict] = None) -> dict:
+        """Mock query by embedding - returns first n_results documents."""
+        if not self.documents:
+            return {
+                "ids": [],
+                "documents": [],
+                "metadatas": [],
+                "distances": []
+            }
+        
+        filtered_docs = []
+        for doc in self.documents:
+            if where:
+                match = True
+                for key, value in where.items():
+                    if key not in doc.meta or doc.meta[key] != value:
+                        match = False
+                        break
+                if not match:
+                    continue
+            filtered_docs.append(doc)
+        
+        result_docs = filtered_docs[:n_results]
+        return {
+            "ids": [doc.id for doc in result_docs],
+            "documents": [doc.content for doc in result_docs],
+            "metadatas": [doc.meta for doc in result_docs],
+            "distances": [0.0] * len(result_docs)  # Mock perfect similarity score
+        }
 
 @pytest.fixture
 def mock_embeddings(settings):
@@ -127,7 +161,7 @@ def mock_embeddings(settings):
 @pytest.fixture
 def mock_store(mock_embeddings, settings):
     """Create a mock document store for testing."""
-    return InMemoryDocumentStore(
+    return MockDocumentStore(
         embedding_dim=settings.embedding_dim,
         collection_name=settings.collection_name,
         embeddings_model=mock_embeddings
@@ -165,16 +199,20 @@ def test_mock_embeddings(mock_embeddings, settings):
 def test_mock_store(mock_store, test_documents):
     """Test mock store functionality."""
     # Test adding documents
-    mock_store.add_documents(test_documents)
+    mock_store.add(
+        documents=[doc.content for doc in test_documents],
+        metadatas=[doc.meta for doc in test_documents],
+        ids=[doc.id for doc in test_documents]
+    )
     assert len(mock_store.documents) == 2
     
     # Test retrieving documents
-    documents = mock_store.get_all_documents()
-    assert len(documents) == 2
-    assert documents[0].id == "1"
-    assert documents[1].id == "2"
+    documents = mock_store.get()
+    assert len(documents["documents"]) == 2
+    assert documents["ids"][0] == "1"
+    assert documents["ids"][1] == "2"
     
     # Test filtering by namespace
-    filtered = mock_store.get_all_documents(filters={"namespace": "test1"})
-    assert len(filtered) == 1
-    assert filtered[0].namespace == "test1" 
+    filtered = mock_store.get(where={"namespace": "test1"})
+    assert len(filtered["documents"]) == 1
+    assert filtered["metadatas"][0]["namespace"] == "test1" 

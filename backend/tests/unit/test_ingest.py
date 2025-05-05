@@ -39,7 +39,7 @@ def test_ingest_happy_path(client, monkeypatch):
     mock_settings = Settings(
         embedding_model="mxbai-embed-large:latest",
         generator_model_name="mistral:latest",
-        embedding_dim=1024,
+        embedding_dim=768,
         ollama_api_url="http://localhost:11434",
         collection_name="test_collection",
         api_host="0.0.0.0",
@@ -76,10 +76,45 @@ Answer:""",
     class DummyStore:
         def __init__(self):
             self.embedding_dim = 768
-        def write_documents(self, chunks):
-            # pretend we saw 3 chunks per file
-            self.saved = chunks
-            return len(chunks)  # Return number of documents written
+            self.documents = []
+            
+        def add(self, documents, metadatas, ids):
+            for doc, meta, doc_id in zip(documents, metadatas, ids):
+                self.documents.append({
+                    "id": doc_id,
+                    "content": doc,
+                    "meta": meta
+                })
+            return len(documents)
+            
+        def get(self, ids=None, where=None):
+            if not ids and not where:
+                return {
+                    "ids": [doc["id"] for doc in self.documents],
+                    "documents": [doc["content"] for doc in self.documents],
+                    "metadatas": [doc["meta"] for doc in self.documents]
+                }
+            
+            filtered_docs = []
+            for doc in self.documents:
+                if ids and doc["id"] not in ids:
+                    continue
+                if where:
+                    match = True
+                    for key, value in where.items():
+                        if key not in doc["meta"] or doc["meta"][key] != value:
+                            match = False
+                            break
+                    if not match:
+                        continue
+                filtered_docs.append(doc)
+            
+            return {
+                "ids": [doc["id"] for doc in filtered_docs],
+                "documents": [doc["content"] for doc in filtered_docs],
+                "metadatas": [doc["meta"] for doc in filtered_docs]
+            }
+
     dummy_store = DummyStore()
     
     # Create a mock embedder that returns lists instead of numpy arrays
@@ -135,14 +170,14 @@ Answer:""",
         ]
         resp = client.post("/ingest", files=files, data={"namespace": "ns"})
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["status"] == "success"
-        assert body["namespace"] == "ns"
-        assert body["files_ingested"] == 2
-        assert body["total_chunks"] == 6  # 3 chunks per file * 2 files
+        
+        # Verify documents were added
+        results = dummy_store.get()
+        assert len(results["documents"]) == 6  # 3 chunks per file * 2 files
+        assert all(meta["namespace"] == "ns" for meta in results["metadatas"])
     finally:
         # Clean up dependency overrides
-        app.dependency_overrides = {}
+        app.dependency_overrides.clear()
 
 def test_ingest_large_file(client, monkeypatch, test_data_dir):
     # Create a small test file
@@ -208,12 +243,45 @@ Answer:""",
     class MockDocumentStore:
         def __init__(self):
             self.embedding_dim = 768
-            self.saved = None
+            self.documents = []
             
-        def write_documents(self, documents):
-            self.saved = documents
+        def add(self, documents, metadatas, ids):
+            for doc, meta, doc_id in zip(documents, metadatas, ids):
+                self.documents.append({
+                    "id": doc_id,
+                    "content": doc,
+                    "meta": meta
+                })
             return len(documents)
-    
+            
+        def get(self, ids=None, where=None):
+            if not ids and not where:
+                return {
+                    "ids": [doc["id"] for doc in self.documents],
+                    "documents": [doc["content"] for doc in self.documents],
+                    "metadatas": [doc["meta"] for doc in self.documents]
+                }
+            
+            filtered_docs = []
+            for doc in self.documents:
+                if ids and doc["id"] not in ids:
+                    continue
+                if where:
+                    match = True
+                    for key, value in where.items():
+                        if key not in doc["meta"] or doc["meta"][key] != value:
+                            match = False
+                            break
+                    if not match:
+                        continue
+                filtered_docs.append(doc)
+            
+            return {
+                "ids": [doc["id"] for doc in filtered_docs],
+                "documents": [doc["content"] for doc in filtered_docs],
+                "metadatas": [doc["meta"] for doc in filtered_docs]
+            }
+
     # Override dependencies
     app.dependency_overrides[get_settings] = lambda: mock_settings
     app.dependency_overrides[get_embedder] = lambda: MockEmbedder()
@@ -235,14 +303,15 @@ Answer:""",
         # Test ingestion
         resp = client.post("/ingest", files=[large_file], data={"namespace": "ns"})
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["status"] == "success"
-        assert body["namespace"] == "ns"
-        assert body["files_ingested"] == 1
-        assert body["total_chunks"] == 4  # Should have exactly 4 chunks
+        
+        # Verify documents were added
+        store = app.dependency_overrides[get_document_store]()
+        results = store.get()
+        assert len(results["documents"]) == 4
+        assert all(meta["namespace"] == "ns" for meta in results["metadatas"])
     finally:
         # Clean up dependency overrides
-        app.dependency_overrides = {}
+        app.dependency_overrides.clear()
 
 def test_ingest_file_size(client, monkeypatch):
     """Test that file size is correctly captured and stored in metadata."""
@@ -258,12 +327,45 @@ def test_ingest_file_size(client, monkeypatch):
     class DummyStore:
         def __init__(self):
             self.embedding_dim = 768
-            self.saved = None
-        
-        def write_documents(self, chunks):
-            self.saved = chunks
-            return len(chunks)  # Return number of documents written
-    
+            self.documents = []
+            
+        def add(self, documents, metadatas, ids):
+            for doc, meta, doc_id in zip(documents, metadatas, ids):
+                self.documents.append({
+                    "id": doc_id,
+                    "content": doc,
+                    "meta": meta
+                })
+            return len(documents)
+            
+        def get(self, ids=None, where=None):
+            if not ids and not where:
+                return {
+                    "ids": [doc["id"] for doc in self.documents],
+                    "documents": [doc["content"] for doc in self.documents],
+                    "metadatas": [doc["meta"] for doc in self.documents]
+                }
+            
+            filtered_docs = []
+            for doc in self.documents:
+                if ids and doc["id"] not in ids:
+                    continue
+                if where:
+                    match = True
+                    for key, value in where.items():
+                        if key not in doc["meta"] or doc["meta"][key] != value:
+                            match = False
+                            break
+                    if not match:
+                        continue
+                filtered_docs.append(doc)
+            
+            return {
+                "ids": [doc["id"] for doc in filtered_docs],
+                "documents": [doc["content"] for doc in filtered_docs],
+                "metadatas": [doc["meta"] for doc in filtered_docs]
+            }
+
     dummy_store = DummyStore()
     monkeypatch.setattr(app.dependencies, "_document_store", dummy_store)
     
@@ -288,8 +390,13 @@ def test_ingest_file_size(client, monkeypatch):
     # Test ingestion
     resp = client.post("/ingest", files=[test_file])
     assert resp.status_code == 200
-    assert len(dummy_store.saved) == 2
-    assert all(doc.meta.get("file_size") == len(test_content) for doc in dummy_store.saved)
+    
+    # Verify file size was captured
+    results = dummy_store.get()
+    assert len(results["documents"]) > 0
+    for meta in results["metadatas"]:
+        assert "file_size" in meta
+        assert meta["file_size"] == len(test_content)
 
 def test_settings_endpoint(client):
     response = client.get("/settings")

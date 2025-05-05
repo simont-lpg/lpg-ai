@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     
     # Document Store Settings
     collection_name: str = Field(..., description="Name of the document collection")
+    chroma_dir: str = Field(default="./chroma_db", description="Directory for Chroma persistence")
     
     # API Settings
     api_host: str = Field(..., description="Host to bind the API server to")
