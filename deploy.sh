@@ -33,10 +33,10 @@ git pull origin main
 # Step 4: Copy environment files
 echo "📋 Copying environment files..."
 # Check and copy backend environment
-if check_file_exists "backend/.env.production" "Backend production environment"; then
-    cp "backend/.env.production" "backend/.env"
-    echo "Copied backend/.env.production → backend/.env"
-fi
+# if check_file_exists "backend/.env.production" "Backend production environment"; then
+#     cp "backend/.env.production" "backend/.env"
+#     echo "Copied backend/.env.production → backend/.env"
+# fi
 
 # Check and copy frontend environment
 if check_file_exists "frontend/.env.production" "Frontend production environment"; then

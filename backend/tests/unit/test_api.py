@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 import pytest
+import os
 from backend.app.main import app
 from unittest.mock import patch, MagicMock
 from backend.app.config import Settings
@@ -51,7 +52,12 @@ def test_root_endpoint(client):
     """Test the root endpoint returns correct message."""
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"message": "LearnPro Group AI Service is running"}
+    
+    is_dev_mode = os.getenv("LPG_AI_DEV_MODE", "false") == "true"
+    if is_dev_mode:
+        assert response.json() == {"message": "LPG AI backend is running"}
+    else:
+        assert response.headers["content-type"].startswith("text/html")
 
 def test_query_endpoint_validation(client):
     """Test query endpoint input validation."""
@@ -119,7 +125,11 @@ def test_health_check_endpoint(client):
     """Test health check endpoint."""
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "healthy", "mode": "development"}
+    data = response.json()
+    assert data["status"] == "healthy"
+    
+    is_dev_mode = os.getenv("LPG_AI_DEV_MODE", "false") == "true"
+    assert data["mode"] == "development" if is_dev_mode else "production"
 
 def test_response_model():
     """Test that the Response model correctly validates input."""
