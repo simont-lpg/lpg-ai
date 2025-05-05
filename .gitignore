@@ -66,9 +66,9 @@ docker-compose.override.yml
 .env
 .venv
 frontend/.env
-!backend/.env.production
 !backend/.env
 !backend/.env.example
+backend/.env.production
 
 # IDE
 *.DS_Store
