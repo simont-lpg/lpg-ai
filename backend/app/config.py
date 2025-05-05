@@ -29,9 +29,6 @@ class Settings(BaseSettings):
     environment: str = Field(..., description="Current environment (development, production)")
     log_level: str = Field(..., description="Logging level")
     
-    # Database Settings
-    database_url: str = Field(..., description="Database connection URL")
-    
     # Security Settings
     secret_key: str = Field(..., description="Secret key for JWT tokens")
     rate_limit_per_minute: int = Field(..., description="Maximum requests per minute")
@@ -125,7 +122,6 @@ Answer:""",
             tuple(self.cors_origins),
             self.environment,
             self.log_level,
-            self.database_url,
             self.secret_key,
             self.rate_limit_per_minute,
             self.generator_model_name,
@@ -149,7 +145,6 @@ Answer:""",
             tuple(self.cors_origins) == tuple(other.cors_origins) and
             self.environment == other.environment and
             self.log_level == other.log_level and
-            self.database_url == other.database_url and
             self.secret_key == other.secret_key and
             self.rate_limit_per_minute == other.rate_limit_per_minute and
             self.generator_model_name == other.generator_model_name and

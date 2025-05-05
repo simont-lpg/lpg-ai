@@ -47,7 +47,6 @@ def test_default_settings():
         dev_mode=False,
         environment="development",
         log_level="INFO",
-        database_url="sqlite:///./lpg_ai.db",
         secret_key="your-secret-key-here",
         rate_limit_per_minute=60
     )
@@ -114,7 +113,6 @@ def test_config_validation():
             dev_mode=False,
             environment="development",
             log_level="INFO",
-            database_url="sqlite:///./lpg_ai.db",
             secret_key="test",
             rate_limit_per_minute=60
         )
@@ -133,7 +131,6 @@ def test_config_validation():
             dev_mode=False,
             environment="development",
             log_level="INFO",
-            database_url="sqlite:///./lpg_ai.db",
             secret_key="test",
             rate_limit_per_minute=60
         )
@@ -177,7 +174,6 @@ def test_settings_initialization(settings):
     assert settings.cors_origins is not None
     assert settings.environment is not None
     assert settings.log_level is not None
-    assert settings.database_url is not None
     assert settings.secret_key is not None
     assert settings.rate_limit_per_minute is not None
 

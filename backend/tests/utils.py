@@ -21,7 +21,6 @@ def get_test_settings():
         dev_mode=True,
         environment="test",
         log_level="INFO",
-        database_url="sqlite:///./test.db",
         secret_key="test_secret",
         rate_limit_per_minute=60,
         default_top_k=5,
