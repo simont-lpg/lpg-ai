@@ -58,16 +58,16 @@ class MockDocumentStore:
         """Get the collection name."""
         return self._collection_name
     
-    def delete(self, ids: Optional[List[str]] = None):
+    def delete_documents(self, document_ids: Optional[List[str]] = None) -> None:
         """Delete documents from the store."""
-        if ids is None:
+        if document_ids is None:
             self.documents = []
             self.embeddings = []
             return
         
         indices_to_delete = []
         for i, doc in enumerate(self.documents):
-            if doc.id in ids:
+            if doc.id in document_ids:
                 indices_to_delete.append(i)
         
         for i in sorted(indices_to_delete, reverse=True):

@@ -60,13 +60,13 @@ def dummy_store():
                 "metadatas": [doc["meta"] for doc in filtered_docs]
             }
             
-        def delete(self, ids=None):
-            if ids is None:
+        def delete_documents(self, document_ids=None):
+            if document_ids is None:
                 self.documents = []
                 return
             
-            self.documents = [doc for doc in self.documents if doc["id"] not in ids]
-            return len(ids)
+            self.documents = [doc for doc in self.documents if doc["id"] not in document_ids]
+            return len(document_ids)
     
     return DummyStore()
 

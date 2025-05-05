@@ -68,7 +68,8 @@ describe('API', () => {
       const fileName = 'test.pdf';
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
-        status: 500
+        status: 500,
+        json: () => Promise.resolve({ detail: { error: 'Failed to delete document' } })
       });
 
       await expect(deleteDocument(fileName)).rejects.toThrow('Failed to delete document');

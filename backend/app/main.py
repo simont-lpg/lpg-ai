@@ -220,8 +220,8 @@ async def delete_documents(
             return DeleteDocumentsResponse(status="success", deleted=0)
         
         # Delete the documents
-        document_store.delete(
-            ids=results["ids"]
+        document_store.delete_documents(
+            document_ids=results["ids"]
         )
         
         return DeleteDocumentsResponse(
@@ -229,8 +229,15 @@ async def delete_documents(
             deleted=len(results["ids"])
         )
     except Exception as e:
-        logger.error(f"Error in delete_documents endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail={"error": str(e)})
+        logger.error(f"Error in delete_documents endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": str(e),
+                "status": "error",
+                "deleted": 0
+            }
+        )
 
 @app.get("/files", response_model=FileListResponse)
 async def get_files(document_store = Depends(get_document_store)):

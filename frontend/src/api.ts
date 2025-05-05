@@ -41,7 +41,8 @@ export const deleteDocument = async (fileName: string): Promise<void> => {
     body: JSON.stringify({ file_name: fileName }),
   });
   if (!response.ok) {
-    throw new Error('Failed to delete document');
+    const errorData = await response.json();
+    throw new Error(errorData.detail?.error || 'Failed to delete document');
   }
 };
 
