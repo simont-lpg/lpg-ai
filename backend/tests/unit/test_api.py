@@ -55,7 +55,7 @@ def test_root_endpoint(client):
     
     is_dev_mode = os.getenv("LPG_AI_DEV_MODE", "false") == "true"
     if is_dev_mode:
-        assert response.json() == {"message": "LPG AI backend is running"}
+        assert response.json() == {"message": "LearnPro Group AI Service is running"}
     else:
         assert response.headers["content-type"].startswith("text/html")
 
