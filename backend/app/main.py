@@ -16,6 +16,7 @@ import numpy as np
 import json
 import os
 import httpx
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 # Get settings
 settings = get_settings()
+
+# Define frontend distribution directory
+BASE_DIR = Path(__file__).parent.parent.parent
+frontend_dist = os.path.join(BASE_DIR, "frontend", "dist")
 
 # Log startup mode
 logger.info(f"Starting in {'development' if settings.dev_mode else 'production'} mode")
@@ -67,6 +72,8 @@ print("SETTINGS LOADED:", settings.model_dump())
 async def root():
     if settings.dev_mode:
         return {"message": "LearnPro Group AI Service is running"}
+    if not os.path.exists(os.path.join(frontend_dist, "index.html")):
+        return {"message": "Frontend not built. Please run 'npm run build' in the frontend directory."}
     return FileResponse(os.path.join(frontend_dist, "index.html"))
 
 @app.get("/health")

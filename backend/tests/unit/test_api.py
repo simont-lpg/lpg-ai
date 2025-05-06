@@ -53,11 +53,16 @@ def test_root_endpoint(client):
     response = client.get("/")
     assert response.status_code == 200
     
-    is_dev_mode = os.getenv("LPG_AI_DEV_MODE", "false") == "true"
+    is_dev_mode = os.getenv("LPG_AI_DEV_MODE", "false").lower() == "true"
     if is_dev_mode:
         assert response.json() == {"message": "LearnPro Group AI Service is running"}
     else:
-        assert response.headers["content-type"].startswith("text/html")
+        # In production mode, we should get either HTML or a JSON message
+        content_type = response.headers.get("content-type", "")
+        if content_type.startswith("text/html"):
+            assert "<!DOCTYPE html>" in response.text
+        else:
+            assert response.json() == {"message": "Frontend not built. Please run 'npm run build' in the frontend directory."}
 
 def test_query_endpoint_validation(client):
     """Test query endpoint input validation."""
