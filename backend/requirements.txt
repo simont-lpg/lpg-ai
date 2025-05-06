@@ -10,4 +10,6 @@ pytest-cov>=3.0.0
 black>=22.0.0
 isort>=5.0.0
 flake8>=4.0.0
-chromadb>=0.4.22 
+chromadb>=0.4.22
+unstructured>=0.10.30
+python-multipart>=0.0.6 

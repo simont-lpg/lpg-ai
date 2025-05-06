@@ -59,6 +59,10 @@ fi
 echo "Activating virtual environment..."
 source "$BASE_DIR/.venv/bin/activate" || { echo "Error: Could not activate virtual environment"; exit 1; }
 
+# Install backend dependencies if not already installed
+echo "Installing backend dependencies..."
+"$BASE_DIR/.venv/bin/pip" install -r "$BASE_DIR/backend/requirements.txt" || { echo "Error: Failed to install backend dependencies"; exit 1; }
+
 if [ "$MODE" = "prod" ]; then
     echo "Setting up production environment..."
     
@@ -82,7 +86,7 @@ if [ "$MODE" = "prod" ]; then
     mkdir -p "$BASE_DIR/logs"
     
     # Start backend with logging
-    BASE_DIR="$BASE_DIR" uvicorn backend.app.main:app --host 0.0.0.0 --port 8003 > "$BASE_DIR/logs/backend.log" 2>&1 &
+    BASE_DIR="$BASE_DIR" "$BASE_DIR/.venv/bin/uvicorn" backend.app.main:app --host 0.0.0.0 --port 8003 > "$BASE_DIR/logs/backend.log" 2>&1 &
     BACKEND_PID=$!
     
     # Wait for backend to start and check if port is listening
@@ -114,7 +118,7 @@ else
     # Start backend in dev mode
     echo "Starting backend in dev mode..."
     cd "$BASE_DIR" || { echo "Error: Could not change to base directory"; exit 1; }
-    BASE_DIR="$BASE_DIR" uvicorn backend.app.main:app --reload --host "${API_HOST:-localhost}" --port "${API_PORT:-8000}" &
+    BASE_DIR="$BASE_DIR" "$BASE_DIR/.venv/bin/uvicorn" backend.app.main:app --reload --host "${API_HOST:-localhost}" --port "${API_PORT:-8000}" &
     BACKEND_PID=$!
     
     # Wait for both processes
