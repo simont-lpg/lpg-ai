@@ -12,9 +12,18 @@ if [ -f "backend/.env" ]; then
         # Export the variable if it's in KEY=VALUE format
         if [[ "$line" =~ ^[[:alnum:]_]+= ]]; then
             export "$line"
-            # Extract variable name and show it's being set
+            # Extract variable name and value
             var_name="${line%%=*}"
-            echo "  Set $var_name"
+            var_value="${line#*=}"
+            
+            # Mask sensitive values
+            if [[ "$var_name" == *"SECRET"* ]] || [[ "$var_name" == *"KEY"* ]]; then
+                masked_value="********"
+            else
+                masked_value="$var_value"
+            fi
+            
+            echo "  Set $var_name = $masked_value"
         fi
     done < "backend/.env"
     echo "Environment variables loaded successfully."
