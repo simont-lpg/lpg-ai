@@ -137,7 +137,7 @@ else
     # Start backend in dev mode
     echo "Starting backend in dev mode..."
     cd "$BASE_DIR" || { echo "Error: Could not change to base directory"; exit 1; }
-    BASE_DIR="$BASE_DIR" "$BASE_DIR/.venv/bin/uvicorn" backend.app.main:app --reload --host "${API_HOST:-localhost}" --port "${API_PORT:-8000}" &
+    BASE_DIR="$BASE_DIR" "$BASE_DIR/.venv/bin/uvicorn" backend.app.main:app --reload --host 0.0.0.0 --port 8003 &
     BACKEND_PID=$!
     
     # Wait for both processes
