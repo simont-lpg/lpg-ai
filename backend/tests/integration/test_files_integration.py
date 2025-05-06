@@ -153,6 +153,11 @@ Answer:""",
         # Upload the file
         upload_response = client.post("/ingest", files=[test_file])
         assert upload_response.status_code == 200
+        data = upload_response.json()
+        assert "status" in data
+        assert data["status"] == "success"
+        assert "upload_id" in data
+        assert isinstance(data["upload_id"], str)
         
         # Verify file size was captured
         results = dummy_store.get()

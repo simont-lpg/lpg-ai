@@ -218,11 +218,10 @@ def test_upload_document(client, mock_pipeline):
         )
         assert response.status_code == 200
         data = response.json()
-        assert "documents" in data
-        assert len(data["documents"]) == 1
-        assert data["documents"][0]["content"] == "test content"
-        assert data["documents"][0]["id"] == "1"
-        assert data["documents"][0]["meta"]["namespace"] == "test"
+        assert "status" in data
+        assert data["status"] == "success"
+        assert "upload_id" in data
+        assert isinstance(data["upload_id"], str)
     finally:
         # Clean up the overrides
         app.dependency_overrides.clear()

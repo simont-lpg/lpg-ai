@@ -31,8 +31,7 @@ def test_ingest_unsupported_type(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "success"
-    assert body["files_ingested"] == 0
-    assert body["total_chunks"] == 0
+    assert "upload_id" in body
 
 def test_ingest_happy_path(client, monkeypatch):
     # Create mock settings with the correct embedding dimension
@@ -391,6 +390,11 @@ def test_ingest_file_size(client, monkeypatch):
     # Test ingestion
     resp = client.post("/ingest", files=[test_file])
     assert resp.status_code == 200
+    data = resp.json()
+    assert "status" in data
+    assert data["status"] == "success"
+    assert "upload_id" in data
+    assert isinstance(data["upload_id"], str)
     
     # Verify file size was captured
     results = dummy_store.get()

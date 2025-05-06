@@ -130,8 +130,10 @@ def test_ingest_and_store(client, store, tmp_path):
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert "documents" in data
-    assert len(data["documents"]) > 0
+    assert "status" in data
+    assert data["status"] == "success"
+    assert "upload_id" in data
+    assert isinstance(data["upload_id"], str)
     
     # now inspect the real store to confirm chunks exist
     results = store.get()

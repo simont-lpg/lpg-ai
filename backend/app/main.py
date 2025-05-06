@@ -10,6 +10,8 @@ from .schema import Query, Response, DocumentMetadata, DocumentFull, DeleteDocum
 from .ingest import ingest_documents
 from .dependencies import get_document_store, get_embedder
 from .vectorstore import OllamaEmbeddings
+from .progress import progress_queues
+from sse_starlette.sse import EventSourceResponse
 from pydantic import ConfigDict
 import logging
 import numpy as np
@@ -316,6 +318,22 @@ async def debug_collection(
             status_code=500,
             detail=str(e)
         )
+
+@app.get("/ingest/progress/{upload_id}")
+async def ingest_progress(upload_id: str):
+    """Get progress updates for an ingest operation via SSE."""
+    queue = progress_queues.get(upload_id)
+    if not queue:
+        raise HTTPException(status_code=404, detail="Unknown upload_id")
+
+    async def event_generator():
+        while True:
+            pct = await queue.get()
+            yield {"data": str(pct)}
+            if pct >= 100:
+                break
+
+    return EventSourceResponse(event_generator())
 
 # Mount static files in production mode
 if not settings.dev_mode:
