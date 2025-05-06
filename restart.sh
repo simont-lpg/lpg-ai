@@ -1,6 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 
+# Load environment variables from backend/.env if it exists
+if [ -f "backend/.env" ]; then
+    echo "Loading environment variables from backend/.env..."
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip comments and empty lines
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+        
+        # Export the variable if it's in KEY=VALUE format
+        if [[ "$line" =~ ^[[:alnum:]_]+= ]]; then
+            export "$line"
+            # Extract variable name and show it's being set
+            var_name="${line%%=*}"
+            echo "  Set $var_name"
+        fi
+    done < "backend/.env"
+    echo "Environment variables loaded successfully."
+fi
+
 # Function to print usage and exit
 print_usage() {
     echo "Usage: $0 [dev|prod]"
