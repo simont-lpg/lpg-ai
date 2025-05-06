@@ -39,6 +39,15 @@ class Retriever:
         self.logger.info(f"Filters: {filters}")
         self.logger.info(f"Top k: {top_k}")
         
+        # Log collection info
+        try:
+            all_docs = self.document_store.get_all_documents()
+            self.logger.info(f"Total documents in collection: {len(all_docs)}")
+            if all_docs:
+                self.logger.info(f"Sample document metadata: {all_docs[0].meta}")
+        except Exception as e:
+            self.logger.error(f"Error getting collection info: {str(e)}")
+        
         # Generate query embedding
         query_embedding = self.model.embed_batch([query])[0]
         
@@ -68,6 +77,8 @@ class Retriever:
         
         if documents:
             self.logger.info(f"First document content: {documents[0].content[:100]}...")
+            self.logger.info(f"First document score: {documents[0].score}")
+            self.logger.info(f"First document metadata: {documents[0].meta}")
         else:
             self.logger.warning("No documents retrieved")
         

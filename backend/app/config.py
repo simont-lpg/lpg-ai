@@ -40,7 +40,11 @@ class Settings(BaseSettings):
         validation_alias="LPG_AI_TOP_K",
         description="Max docs to retrieve before filtering"
     )
-    retriever_score_threshold: float = Field(0.7, env="LPG_AI_SCORE_THRESHOLD", description="Score threshold for document retrieval")
+    retriever_score_threshold: float = Field(
+        default=0.1,  # Lowered from 0.7 to be more lenient
+        env="LPG_AI_SCORE_THRESHOLD",
+        description="Score threshold for document retrieval"
+    )
     generator_temperature: float = Field(0.7, env="LPG_AI_TEMPERATURE", description="Temperature for text generation")
     generator_max_tokens: int = Field(1000, env="LPG_AI_MAX_TOKENS", description="Maximum tokens for text generation")
     prompt_template: str = Field(

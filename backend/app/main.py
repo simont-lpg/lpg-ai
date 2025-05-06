@@ -277,6 +277,39 @@ async def get_files(document_store = Depends(get_document_store)):
         logger.error(f"Error in get_files endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
+@app.get("/debug/collection")
+async def debug_collection(
+    document_store = Depends(get_document_store)
+):
+    """Debug endpoint to inspect collection contents."""
+    try:
+        # Get all documents
+        all_docs = document_store.get_all_documents()
+        
+        # Get sample documents with their metadata and scores
+        sample_docs = []
+        for doc in all_docs[:5]:  # Get first 5 documents
+            sample_docs.append({
+                "id": doc.id,
+                "content_preview": doc.content[:200] + "..." if len(doc.content) > 200 else doc.content,
+                "metadata": doc.meta,
+                "has_embedding": doc.embedding is not None,
+                "embedding_dim": len(doc.embedding) if doc.embedding is not None else None
+            })
+        
+        return {
+            "total_documents": len(all_docs),
+            "sample_documents": sample_docs,
+            "collection_name": document_store.collection_name,
+            "persist_directory": document_store.persist_directory
+        }
+    except Exception as e:
+        logger.error(f"Error in debug collection endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
 # Mount static files in production mode
 if not settings.dev_mode:
     # Get the absolute path to the frontend dist directory

@@ -1,7 +1,7 @@
 from typing import Generator, List, Any
 from fastapi import Depends
 from .config import Settings, get_settings
-from .vectorstore import get_vectorstore, OllamaEmbeddings, InMemoryDocumentStore
+from .vectorstore import get_vectorstore, OllamaEmbeddings, InMemoryDocumentStore, ChromaDocumentStore
 from .schema import DocumentFull
 from sentence_transformers import SentenceTransformer
 import numpy as np
@@ -55,7 +55,7 @@ def get_embedder(settings: Settings = Depends(get_settings)) -> Any:
             )
     return _embedder
 
-def get_document_store(settings: Settings = Depends(get_settings)) -> InMemoryDocumentStore:
+def get_document_store(settings: Settings = Depends(get_settings)) -> ChromaDocumentStore:
     """Get document store instance."""
     global _document_store
     
