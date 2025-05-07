@@ -99,7 +99,7 @@ export const queryRAG = async (
     body: JSON.stringify({
       text,
       top_k: topK,
-      file_id: fileId,
+      file_id: fileId || undefined,
     }),
   });
   if (!response.ok) {

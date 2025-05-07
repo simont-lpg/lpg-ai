@@ -103,8 +103,33 @@ describe('FileManager', () => {
       expect(api.listFiles).toHaveBeenCalled();
     });
 
+    // Test selecting "All Files"
+    fireEvent.click(screen.getByTestId('all-files-row'));
+    expect(mockOnFileSelect).toHaveBeenCalledWith(undefined);
+
+    // Test selecting a specific file
     fireEvent.click(screen.getByText('test1.pdf'));
     expect(mockOnFileSelect).toHaveBeenCalledWith('1');
+  });
+
+  it('shows correct selection state for "All Files"', async () => {
+    render(<FileManager onFileSelect={mockOnFileSelect} selectedFileId={undefined} />);
+
+    await waitFor(() => {
+      expect(api.listFiles).toHaveBeenCalled();
+    });
+
+    const allFilesRow = screen.getByTestId('all-files-row');
+    expect(allFilesRow).toBeInTheDocument();
+    expect(screen.getByText('All Files')).toBeInTheDocument();
+
+    // Select a specific file
+    fireEvent.click(screen.getByText('test1.pdf'));
+    expect(mockOnFileSelect).toHaveBeenCalledWith('1');
+
+    // Select "All Files" again
+    fireEvent.click(allFilesRow);
+    expect(mockOnFileSelect).toHaveBeenCalledWith(undefined);
   });
 
   it('handles file deletion', async () => {

@@ -51,6 +51,7 @@ class Query(BaseModel):
     text: StrictStr = Field(min_length=1)
     top_k: int = Field(default=5, ge=1, le=100)
     namespace: Optional[str] = Field(default=None, description="Optional namespace to filter documents")
+    file_id: Optional[str] = Field(default=None, description="Optional file ID to filter documents")
 
 class Response(BaseModel):
     """Response model for RAG queries."""

@@ -16,7 +16,7 @@ import { DeleteIcon } from '@chakra-ui/icons';
 import { listFiles, deleteDocument, uploadFiles, watchIngestProgress, File } from '../api';
 
 interface FileManagerProps {
-  onFileSelect: (fileId: string) => void;
+  onFileSelect: (fileId: string | undefined) => void;
   selectedFileId?: string;
 }
 
@@ -205,6 +205,17 @@ export const FileManager: React.FC<FileManagerProps> = ({
         )}
 
         <List spacing={2}>
+          <ListItem
+            p={2}
+            borderRadius="md"
+            bg={selectedFileId === undefined ? selectedBg : 'transparent'}
+            _hover={{ bg: hoverBg }}
+            cursor="pointer"
+            onClick={() => onFileSelect(undefined)}
+            data-testid="all-files-row"
+          >
+            <Text fontWeight="medium">All Files</Text>
+          </ListItem>
           {files.map((file) => (
             <ListItem
               key={file.id}

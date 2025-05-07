@@ -118,8 +118,10 @@ async def query(
             dev=settings.dev_mode
         )
         
-        # Set filters based on namespace
+        # Set filters based on namespace and file_id
         filters = {"namespace": query.namespace} if query.namespace else {"namespace": "default"}
+        if query.file_id:
+            filters["file_id"] = query.file_id
         
         # Log query details
         logger.info(f"Processing query: {query.text}")
