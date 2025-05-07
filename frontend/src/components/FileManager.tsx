@@ -10,9 +10,10 @@ import {
   List,
   ListItem,
   useColorModeValue,
+  Progress,
 } from '@chakra-ui/react';
 import { DeleteIcon } from '@chakra-ui/icons';
-import { listFiles, deleteDocument, uploadFiles, File } from '../api';
+import { listFiles, deleteDocument, uploadFiles, watchIngestProgress, File } from '../api';
 
 interface FileManagerProps {
   onFileSelect: (fileId: string) => void;
@@ -25,6 +26,8 @@ export const FileManager: React.FC<FileManagerProps> = ({
 }) => {
   const [files, setFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [phase, setPhase] = useState<"idle"|"upload"|"processing"|"done">("idle");
+  const [progress, setProgress] = useState(0);
   const toast = useToast();
 
   // Move color mode values to the top level
@@ -89,17 +92,42 @@ export const FileManager: React.FC<FileManagerProps> = ({
     }
 
     setIsLoading(true);
+    setPhase("upload");
+    setProgress(0);
+
     try {
-      await uploadFiles(files);
-      await fetchFiles();
-      toast({
-        title: 'Success',
-        description: 'Files uploaded successfully',
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
+      // Handle upload phase
+      const uploadId = await uploadFiles(Array.from(files), "default", (phase, pct) => {
+        if (phase === "upload") {
+          setPhase("upload");
+          setProgress(pct);
+        } else if (phase === "processing") {
+          setPhase("processing");
+          setProgress(pct);
+        }
       });
-      event.target.value = ''; // Reset the input after successful upload
+
+      // Handle processing phase
+      let stop: (() => void) | undefined;
+      stop = watchIngestProgress(uploadId, (phase, pct) => {
+        setPhase(phase);
+        setProgress(pct);
+        if (pct >= 100 && stop) {
+          stop();
+          setPhase("idle");
+          fetchFiles();
+          toast({
+            title: 'Success',
+            description: 'Files uploaded and processed successfully',
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          });
+          event.target.value = ''; // Reset the input after successful upload
+          setIsLoading(false);
+        }
+      });
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to upload files';
       toast({
@@ -109,7 +137,7 @@ export const FileManager: React.FC<FileManagerProps> = ({
         duration: 5000,
         isClosable: true,
       });
-    } finally {
+      setPhase("idle");
       setIsLoading(false);
     }
   };
@@ -166,6 +194,15 @@ export const FileManager: React.FC<FileManagerProps> = ({
             Supported file types: {SUPPORTED_FILE_TYPES.join(', ')}
           </Text>
         </VStack>
+
+        {phase !== "idle" && (
+          <Box data-testid="progress-container">
+            <Text mb={2} data-testid="upload-progress-text">
+              {phase === "upload" ? "Uploading…" : "Processing…"} {progress}%
+            </Text>
+            <Progress value={progress} size="sm" colorScheme="blue" />
+          </Box>
+        )}
 
         <List spacing={2}>
           {files.map((file) => (
