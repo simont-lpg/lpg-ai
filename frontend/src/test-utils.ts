@@ -1,12 +1,24 @@
 import { UseToastOptions } from '@chakra-ui/react';
+import { vi } from 'vitest';
 
-export const createMockToast = () => {
-  const mockToast = jest.fn((options?: UseToastOptions) => Math.random());
-  mockToast.close = jest.fn();
-  mockToast.closeAll = jest.fn();
-  mockToast.update = jest.fn();
-  mockToast.isActive = jest.fn();
-  mockToast.promise = jest.fn();
+interface MockToast {
+  (options?: UseToastOptions): number;
+  close: () => void;
+  closeAll: () => void;
+  update: () => void;
+  isActive: () => boolean;
+  promise: () => Promise<any>;
+}
 
-  return mockToast;
-}; 
+const mockToast = Object.assign(
+  vi.fn((options?: UseToastOptions) => Math.random()),
+  {
+    close: vi.fn(),
+    closeAll: vi.fn(),
+    update: vi.fn(),
+    isActive: vi.fn(),
+    promise: vi.fn()
+  }
+) as MockToast;
+
+export { mockToast }; 

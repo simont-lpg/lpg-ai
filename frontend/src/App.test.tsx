@@ -4,37 +4,56 @@ import { ChakraProvider } from '@chakra-ui/react';
 import App from './App';
 import { queryRAG } from './api';
 import theme from './theme';
+import { vi, describe, it, expect } from 'vitest';
 
 // Mock the API
-jest.mock('./api', () => ({
-  queryRAG: jest.fn(),
+vi.mock('./api', () => ({
+  queryRAG: vi.fn(),
 }));
 
 // Mock the config
-jest.mock('./config', () => ({
+vi.mock('./config', () => ({
   getConfig: () => ({ apiBaseUrl: "http://test-server" }),
 }));
 
-// Mock the toast
-const mockToast = jest.fn();
-jest.mock('@chakra-ui/react', () => {
-  const actual = jest.requireActual('@chakra-ui/react');
+// Mock Chakra UI
+const mockToast = vi.fn();
+vi.mock('@chakra-ui/react', async () => {
+  const actual = await vi.importActual('@chakra-ui/react');
   return {
     ...actual,
-    useToast: () => mockToast,
+    ChakraProvider: ({ children }: { children: React.ReactNode }) => children,
+    useColorModeValue: vi.fn().mockImplementation((light, dark) => light),
+    useToast: () => mockToast
   };
 });
 
 // Mock fetch globally
-global.fetch = jest.fn();
+global.fetch = vi.fn().mockImplementation(() => 
+  Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({
+      environment: "development",
+      embedding_model: "MiniLM",
+      generator_model: "tinyllama:latest",
+    })
+  })
+);
+
+describe('App', () => {
+  it('renders without crashing', () => {
+    render(<App />);
+    expect(screen.getByAltText('LPG Logo')).toBeInTheDocument();
+  });
+});
 
 describe('App Integration', () => {
   beforeEach(() => {
     // Reset mocks before each test
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     
     // Mock the settings response
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       json: async () => ({
         environment: "development",
         embedding_model: "MiniLM",
@@ -45,7 +64,7 @@ describe('App Integration', () => {
 
   it('handles chat interaction and displays response', async () => {
     // Mock the API response
-    (queryRAG as jest.Mock).mockResolvedValueOnce({
+    (queryRAG as any).mockResolvedValueOnce({
       answers: ['This is the answer'],
       documents: [
         {
@@ -85,7 +104,7 @@ describe('App Integration', () => {
 
   it('handles API errors gracefully', async () => {
     // Mock API error
-    (queryRAG as jest.Mock).mockRejectedValueOnce(new Error('API Error'));
+    (queryRAG as any).mockRejectedValueOnce(new Error('API Error'));
 
     render(
       <ChakraProvider theme={theme}>

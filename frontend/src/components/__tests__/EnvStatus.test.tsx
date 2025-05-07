@@ -1,35 +1,46 @@
-import React from "react";
-import { render, screen } from "@testing-library/react";
-import "@testing-library/jest-dom";
-import { EnvStatus } from "../EnvStatus";
+import React from 'react';
+import { render, screen, waitFor } from '@testing-library/react';
+import { EnvStatus } from '../EnvStatus';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 
-jest.mock("../../config", () => ({
-  getConfig: () => ({ apiBaseUrl: "http://test-server" }),
+// Mock the config
+vi.mock('../../config', () => ({
+  getConfig: () => ({
+    apiBaseUrl: 'http://localhost:8000'
+  })
 }));
 
-describe("EnvStatus", () => {
+// Mock fetch
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
+
+describe('EnvStatus', () => {
   beforeEach(() => {
-    (global.fetch as jest.Mock).mockImplementation(() =>
-      Promise.resolve({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            environment: "development",
-            embedding_model: "MiniLM",
-            generator_model_name: "tinyllama:latest",
-          }),
-      })
-    );
+    vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
+  it('renders environment status', async () => {
+    const mockSettings = {
+      environment: 'development',
+      embedding_model: 'all-MiniLM-L6-v2',
+      generator_model_name: 'tinyllama:latest'
+    };
 
-  it("renders the environment and model names", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockSettings)
+    });
+
     render(<EnvStatus />);
-    expect(await screen.findByText("Environment: development")).toBeInTheDocument();
-    expect(screen.getByText("Embed Model: MiniLM")).toBeInTheDocument();
-    expect(screen.getByText("Gen Model: tinyllama:latest")).toBeInTheDocument();
+
+    // Initially shows loading state
+    expect(screen.getByText('Loading settings...')).toBeInTheDocument();
+
+    // Wait for settings to load
+    await waitFor(() => {
+      expect(screen.getByText('Environment: development')).toBeInTheDocument();
+      expect(screen.getByText('Embed Model: all-MiniLM-L6-v2')).toBeInTheDocument();
+      expect(screen.getByText('Gen Model: tinyllama:latest')).toBeInTheDocument();
+    });
   });
 }); 

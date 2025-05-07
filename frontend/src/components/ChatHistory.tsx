@@ -51,7 +51,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({ messages }) => {
   const sourceBg = useColorModeValue('gray.50', 'gray.700');
 
   return (
-    <VStack spacing={4} align="stretch">
+    <VStack spacing={4} align="stretch" data-testid="chat-history">
       {messages.map((message, index) => (
         <Box key={index}>
           <Text fontWeight="bold">

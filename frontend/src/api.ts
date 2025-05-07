@@ -1,4 +1,5 @@
 import { getConfig } from './config';
+import axios from 'axios';
 
 export interface File {
   filename: string;
@@ -46,22 +47,44 @@ export const deleteDocument = async (fileName: string): Promise<void> => {
   }
 };
 
-export const uploadFiles = async (files: FileList): Promise<void> => {
-  const formData = new FormData();
-  Array.from(files).forEach((file) => {
-    formData.append('files', file);
-  });
+export async function uploadFiles(
+  files: globalThis.File[],
+  namespace: string,
+  onProgress: (phase: "upload", pct: number) => void
+): Promise<string> {
+  const form = new FormData();
+  files.forEach(f => form.append("files", f));
+  form.append("namespace", namespace);
 
-  const response = await fetch(`${getConfig().apiBaseUrl}/ingest`, {
-    method: 'POST',
-    body: formData,
-  });
-  
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.detail?.error || 'Failed to upload files');
-  }
-};
+  const response = await axios.post<{ upload_id: string }>(
+    `${getConfig().apiBaseUrl}/ingest`,
+    form,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress: e => {
+        if (e.total) {
+          const pct = Math.round((e.loaded * 100) / e.total);
+          onProgress("upload", pct);
+        }
+      }
+    }
+  );
+  return response.data.upload_id;
+}
+
+export function watchIngestProgress(
+  uploadId: string,
+  onProgress: (phase: "processing", pct: number) => void
+) {
+  const es = new EventSource(`${getConfig().apiBaseUrl}/ingest/progress/${uploadId}`);
+  es.onmessage = evt => {
+    const pct = parseInt(evt.data, 10);
+    onProgress("processing", pct);
+    if (pct >= 100) es.close();
+  };
+  es.onerror = () => { es.close(); };
+  return () => es.close();
+}
 
 export const queryRAG = async (
   text: string,

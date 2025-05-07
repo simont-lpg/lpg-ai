@@ -2,59 +2,71 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { ChatHistory } from './ChatHistory';
 import { QueryResponse } from '../api';
+import { vi, describe, it, expect } from 'vitest';
+
+// Mock Chakra UI
+vi.mock('@chakra-ui/react', async () => {
+  const actual = await vi.importActual('@chakra-ui/react');
+  return {
+    ...actual,
+    useColorModeValue: vi.fn().mockImplementation((light, dark) => light)
+  };
+});
 
 describe('ChatHistory', () => {
   it('renders user and assistant messages with answers and documents', () => {
     const messages = [
       {
         type: 'user' as const,
-        content: 'Hello',
+        content: 'What is React?'
       },
       {
         type: 'assistant' as const,
-        content: 'Hi there!',
+        content: 'React is a JavaScript library.',
         documents: [
           {
-            content: 'Document 1',
-            meta: {},
+            content: 'React makes it painless to create interactive UIs.',
+            meta: { source: 'docs' },
             id: '1',
-            score: 0.8,
-          },
-          {
-            content: 'Document 2',
-            meta: {},
-            id: '2',
-            score: 0.6,
-          },
-        ] as QueryResponse['documents'],
-      },
+            score: 0.95
+          }
+        ]
+      }
     ];
 
     render(<ChatHistory messages={messages} />);
 
     // Check user message
     expect(screen.getByText('You:')).toBeInTheDocument();
-    expect(screen.getByText('Hello')).toBeInTheDocument();
+    expect(screen.getByText('What is React?')).toBeInTheDocument();
 
     // Check assistant message
     expect(screen.getByText('Assistant:')).toBeInTheDocument();
-    expect(screen.getByText('Hi there!')).toBeInTheDocument();
+    expect(screen.getByText('React is a JavaScript library.')).toBeInTheDocument();
 
-    // Check documents
+    // Check document
+    expect(screen.getByText('React makes it painless to create interactive UIs.')).toBeInTheDocument();
     expect(screen.getByText('Sources:')).toBeInTheDocument();
-    expect(screen.getByText('Document 1')).toBeInTheDocument();
-    expect(screen.getByText('Document 2')).toBeInTheDocument();
-    expect(screen.getByText('Score: 0.800')).toBeInTheDocument();
-    expect(screen.getByText('Score: 0.600')).toBeInTheDocument();
+    expect(screen.getByText('Score: 0.950')).toBeInTheDocument();
+  });
+
+  it('renders empty state when no messages', () => {
+    render(<ChatHistory messages={[]} />);
+    const container = screen.getByTestId('chat-history');
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('shows "No answer available" when answer is empty', () => {
     const messages = [
       {
+        type: 'user' as const,
+        content: 'What is React?'
+      },
+      {
         type: 'assistant' as const,
         content: '',
-        documents: [],
-      },
+        documents: []
+      }
     ];
 
     render(<ChatHistory messages={messages} />);
@@ -65,13 +77,14 @@ describe('ChatHistory', () => {
     const messages = [
       {
         type: 'assistant' as const,
-        content: 'This is a test answer',
-        documents: [],
-      },
+        content: 'Test answer',
+        documents: []
+      }
     ];
 
     render(<ChatHistory messages={messages} />);
-    const answerBubble = screen.getByText('This is a test answer').closest('div');
-    expect(answerBubble).toHaveAttribute('data-testid', 'answer-bubble');
+    const answerBubble = screen.getByTestId('answer-bubble');
+    expect(answerBubble).toBeInTheDocument();
+    expect(answerBubble).toHaveTextContent('Test answer');
   });
 }); 

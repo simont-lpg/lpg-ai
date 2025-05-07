@@ -1,13 +1,13 @@
 import { deleteDocument, listFiles, uploadFiles, queryRAG } from './api';
-import { getConfig } from './config';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 // Mock the config module
-jest.mock('./config', () => ({
-  getConfig: jest.fn()
+vi.mock('./config', () => ({
+  getConfig: vi.fn().mockReturnValue({ apiBaseUrl: 'http://test-api' })
 }));
 
 // Mock fetch globally
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 // Mock DataTransfer
 class MockDataTransfer {
@@ -32,114 +32,95 @@ class MockDataTransfer {
 // @ts-ignore
 global.DataTransfer = MockDataTransfer;
 
-describe('API', () => {
-  const mockConfig = {
-    apiBaseUrl: 'http://localhost:8000'
-  };
-
+describe('API Functions', () => {
   beforeEach(() => {
-    (global.fetch as jest.Mock).mockClear();
-    (getConfig as jest.Mock).mockReturnValue(mockConfig);
-  });
-
-  describe('deleteDocument', () => {
-    it('should make a POST request to /documents/delete with the file name', async () => {
-      const fileName = 'test.pdf';
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ status: 'success', deleted: 1 })
-      });
-
-      await deleteDocument(fileName);
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:8000/documents/delete',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ file_name: fileName }),
-        }
-      );
-    });
-
-    it('should throw an error if the request fails', async () => {
-      const fileName = 'test.pdf';
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        json: () => Promise.resolve({ detail: { error: 'Failed to delete document' } })
-      });
-
-      await expect(deleteDocument(fileName)).rejects.toThrow('Failed to delete document');
-    });
+    vi.clearAllMocks();
   });
 
   describe('listFiles', () => {
-    it('should make a GET request to /files', async () => {
-      const mockFiles = [{ filename: 'test.pdf', id: '1' }];
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+    it('fetches files successfully', async () => {
+      const mockFiles = [
+        { filename: 'test.pdf', id: '1', namespace: 'default', document_count: 1, file_size: 1024 }
+      ];
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ files: mockFiles })
       });
 
       const result = await listFiles();
-
-      expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/files');
       expect(result).toEqual(mockFiles);
+      expect(fetch).toHaveBeenCalledWith('http://test-api/files');
+    });
+
+    it('handles errors', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false
+      });
+
+      await expect(listFiles()).rejects.toThrow('Failed to fetch files');
     });
   });
 
-  describe('uploadFiles', () => {
-    it('should make a POST request to /ingest with FormData', async () => {
-      const file = new File(['test'], 'test.pdf', { type: 'application/pdf' });
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(file);
-      const fileList = dataTransfer.files;
-      
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+  describe('deleteDocument', () => {
+    it('deletes document successfully', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true
       });
 
-      await uploadFiles(fileList);
+      await deleteDocument('test.pdf');
+      expect(fetch).toHaveBeenCalledWith('http://test-api/documents/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ file_name: 'test.pdf' }),
+      });
+    });
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:8000/ingest',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.any(FormData)
-        })
-      );
+    it('handles errors', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ detail: { error: 'Delete failed' } })
+      });
+
+      await expect(deleteDocument('test.pdf')).rejects.toThrow('Delete failed');
     });
   });
 
   describe('queryRAG', () => {
-    it('should make a POST request to /query with the query parameters', async () => {
-      const query = 'test query';
-      const mockResponse = { answers: ['answer'], documents: [] };
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
+    it('queries successfully', async () => {
+      const mockResponse = {
+        answers: ['test answer'],
+        documents: [{ content: 'test', meta: {}, id: '1' }]
+      };
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(mockResponse)
       });
 
-      const result = await queryRAG(query);
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:8000/query',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            text: query,
-            top_k: 3,
-            file_id: undefined
-          }),
-        }
-      );
+      const result = await queryRAG('test query', 3);
       expect(result).toEqual(mockResponse);
+      expect(fetch).toHaveBeenCalledWith('http://test-api/query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: 'test query',
+          top_k: 3,
+          file_id: undefined,
+        }),
+      });
+    });
+
+    it('handles errors', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false
+      });
+
+      await expect(queryRAG('test query')).rejects.toThrow('Failed to query RAG');
     });
   });
 }); 

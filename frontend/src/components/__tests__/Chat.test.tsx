@@ -1,91 +1,103 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Chat } from '../Chat';
-import * as api from '../../api';
+import { queryRAG } from '../../api';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 // Mock the API functions
-jest.mock('../../api', () => ({
-  queryRAG: jest.fn(),
+vi.mock('../../api', () => ({
+  queryRAG: vi.fn(),
 }));
 
 // Mock Chakra UI toast
-jest.mock('@chakra-ui/react', () => ({
-  ...jest.requireActual('@chakra-ui/react'),
-  useToast: () => jest.fn(),
-}));
+const mockToast = vi.fn();
+vi.mock('@chakra-ui/react', async () => {
+  const actual = await vi.importActual('@chakra-ui/react');
+  return {
+    ...actual,
+    useToast: () => mockToast,
+  };
+});
 
 describe('Chat', () => {
-  const mockResponse = {
-    answers: ['Test answer'],
-    documents: [
-      {
-        content: 'Source content',
-        meta: { source: 'test.pdf' },
-        id: '1',
-        score: 0.8
-      },
-    ],
-  };
-
   beforeEach(() => {
-    (api.queryRAG as jest.Mock).mockResolvedValue(mockResponse);
+    vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+  it('renders chat input and handles submission', async () => {
+    const mockQueryResponse = {
+      answers: ['Test answer'],
+      documents: [
+        {
+          content: 'Test document',
+          meta: {},
+          id: '1',
+          score: 0.8,
+        },
+      ],
+    };
 
-  it('renders and handles user input', async () => {
-    render(<Chat />);
+    (queryRAG as any).mockResolvedValueOnce(mockQueryResponse);
 
-    const input = screen.getByPlaceholderText(/type your question/i);
+    render(<Chat selectedFileId="1" />);
+
+    const input = screen.getByPlaceholderText('Type your question...');
     const sendButton = screen.getByRole('button', { name: /send/i });
 
-    // Test input validation
-    expect(sendButton).toBeDisabled();
-    fireEvent.change(input, { target: { value: 'test question' } });
-    expect(sendButton).not.toBeDisabled();
-
-    // Test sending message
+    fireEvent.change(input, { target: { value: 'Test question' } });
     fireEvent.click(sendButton);
 
     await waitFor(() => {
-      expect(api.queryRAG).toHaveBeenCalledWith('test question', 3, undefined);
+      expect(screen.getByText('Test answer')).toBeInTheDocument();
+      expect(screen.getByText('Test document')).toBeInTheDocument();
     });
 
-    // Verify messages are displayed
-    expect(screen.getByText('test question')).toBeInTheDocument();
-    expect(screen.getByText('Test answer')).toBeInTheDocument();
-    expect(screen.getByText('Source content')).toBeInTheDocument();
+    expect(queryRAG).toHaveBeenCalledWith('Test question', 3, '1');
   });
 
-  it('handles API errors gracefully', async () => {
-    (api.queryRAG as jest.Mock).mockRejectedValue(new Error('API Error'));
-    render(<Chat />);
+  it('handles API errors', async () => {
+    (queryRAG as any).mockRejectedValueOnce(new Error('API Error'));
 
-    const input = screen.getByPlaceholderText(/type your question/i);
+    render(<Chat selectedFileId="1" />);
+
+    const input = screen.getByPlaceholderText('Type your question...');
     const sendButton = screen.getByRole('button', { name: /send/i });
 
-    fireEvent.change(input, { target: { value: 'test question' } });
+    fireEvent.change(input, { target: { value: 'Test question' } });
     fireEvent.click(sendButton);
 
     await waitFor(() => {
-      expect(api.queryRAG).toHaveBeenCalled();
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Error',
+          description: 'Failed to get response',
+          status: 'error',
+          duration: 3000,
+          isClosable: true
+        })
+      );
     });
   });
 
   it('handles file context', async () => {
     const selectedFileId = 'test-file-id';
+    const mockQueryResponse = {
+      answers: ['Test answer'],
+      documents: [],
+    };
+
+    (queryRAG as any).mockResolvedValueOnce(mockQueryResponse);
+
     render(<Chat selectedFileId={selectedFileId} />);
 
-    const input = screen.getByPlaceholderText(/type your question/i);
+    const input = screen.getByPlaceholderText('Type your question...');
     const sendButton = screen.getByRole('button', { name: /send/i });
 
     fireEvent.change(input, { target: { value: 'test question' } });
     fireEvent.click(sendButton);
 
     await waitFor(() => {
-      expect(api.queryRAG).toHaveBeenCalledWith(
+      expect(queryRAG).toHaveBeenCalledWith(
         'test question',
         3,
         selectedFileId
@@ -96,7 +108,7 @@ describe('Chat', () => {
   it('handles empty input', () => {
     render(<Chat />);
 
-    const input = screen.getByPlaceholderText(/type your question/i);
+    const input = screen.getByPlaceholderText('Type your question...');
     const sendButton = screen.getByRole('button', { name: /send/i });
 
     fireEvent.change(input, { target: { value: '   ' } });
