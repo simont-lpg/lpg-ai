@@ -366,19 +366,26 @@ class ChromaDocumentStore:
         if new_embeddings.shape[1] != self.embedding_dim:
             raise ValueError(f"Embedding dimension mismatch: expected {self.embedding_dim}, got {new_embeddings.shape[1]}")
         
-        # Add to ChromaDB
+        # Add to ChromaDB in batches
         try:
             logger.info(f"Adding {len(documents)} documents to ChromaDB")
             logger.info(f"First document content preview: {documents[0].content[:100]}...")
             logger.info(f"First embedding shape: {new_embeddings[0].shape}")
             
-            self.collection.add(
-                documents=[doc.content for doc in documents],
-                metadatas=[doc.meta for doc in documents],
-                ids=[doc.id for doc in documents],
-                embeddings=new_embeddings.tolist()
-            )
-            logger.info("Successfully added documents to ChromaDB")
+            # Process in batches of 5000 (slightly below max batch size of 5461)
+            batch_size = 5000
+            for i in range(0, len(documents), batch_size):
+                batch_end = min(i + batch_size, len(documents))
+                logger.info(f"Processing batch {i//batch_size + 1} of {(len(documents) + batch_size - 1)//batch_size}")
+                
+                self.collection.add(
+                    documents=[doc.content for doc in documents[i:batch_end]],
+                    metadatas=[doc.meta for doc in documents[i:batch_end]],
+                    ids=[doc.id for doc in documents[i:batch_end]],
+                    embeddings=new_embeddings[i:batch_end].tolist()
+                )
+            
+            logger.info("Successfully added all documents to ChromaDB")
         except Exception as e:
             logger.error(f"Failed to add documents to ChromaDB: {str(e)}", exc_info=True)
             raise Exception(f"Failed to add documents to ChromaDB: {str(e)}")
